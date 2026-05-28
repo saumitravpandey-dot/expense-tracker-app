@@ -16,6 +16,7 @@ export default function AutoDetect({ onParsed }: Props) {
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   async function parse(type: Tab, content: string) {
     setLoading(true);
@@ -88,6 +89,15 @@ export default function AutoDetect({ onParsed }: Props) {
             )}
           </div>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageChange} />
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => cameraRef.current?.click()}
+              className="md:hidden text-sm px-4 py-2 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950"
+            >
+              📷 Use Camera
+            </button>
+          </div>
           {preview && (
             <button
               onClick={() => parse('image', preview!)}

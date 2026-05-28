@@ -18,20 +18,29 @@ interface EditState {
   transaction_type: string;
 }
 
+function pad(n: number) { return String(n).padStart(2, '0'); }
+
 function thisMonth() {
   const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const to = now.toISOString().split('T')[0];
-  return { from, to };
+  return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to: now.toISOString().split('T')[0] };
 }
 
 function lastMonth() {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   const last = new Date(now.getFullYear(), now.getMonth(), 0);
-  const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
-  return { from, to };
+  return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`, to: `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}` };
+}
+
+function last30Days() {
+  const now = new Date();
+  const from = new Date(now); from.setDate(from.getDate() - 30);
+  return { from: from.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
+}
+
+function thisYear() {
+  const now = new Date();
+  return { from: `${now.getFullYear()}-01-01`, to: now.toISOString().split('T')[0] };
 }
 
 export default function ExpensesPage() {
@@ -176,12 +185,11 @@ function ExpensesPageInner() {
     }
   }
 
-  function applyThisMonth() {
-    const r = thisMonth(); setFrom(r.from); setTo(r.to);
-  }
-  function applyLastMonth() {
-    const r = lastMonth(); setFrom(r.from); setTo(r.to);
-  }
+  function applyThisMonth() { const r = thisMonth(); setFrom(r.from); setTo(r.to); }
+  function applyLastMonth() { const r = lastMonth(); setFrom(r.from); setTo(r.to); }
+  function applyLast30() { const r = last30Days(); setFrom(r.from); setTo(r.to); }
+  function applyThisYear() { const r = thisYear(); setFrom(r.from); setTo(r.to); }
+  function applyAllTime() { setFrom(''); setTo(''); }
 
   async function exportCsv() {
     // Export all matching rows (not just loaded page) via server
@@ -223,6 +231,10 @@ function ExpensesPageInner() {
   });
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const incomeTotal = expenses
+    .filter(e => (e as Expense & { transaction_type?: string }).transaction_type === 'income')
+    .reduce((s, e) => s + e.amount, 0);
+  const expenseTotal = total - incomeTotal;
 
   return (
     <>
@@ -297,27 +309,44 @@ function ExpensesPageInner() {
           </div>
 
           {/* Quick date filters */}
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <span className="text-xs text-gray-400 self-center">Quick:</span>
-            <button onClick={applyThisMonth}
-              className="text-xs px-3 py-1 rounded-full border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950">
-              This Month
-            </button>
-            <button onClick={applyLastMonth}
-              className="text-xs px-3 py-1 rounded-full border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
-              Last Month
-            </button>
+            {[
+              { label: 'This Month', fn: applyThisMonth, emerald: true },
+              { label: 'Last Month', fn: applyLastMonth },
+              { label: 'Last 30 Days', fn: applyLast30 },
+              { label: 'This Year', fn: applyThisYear },
+              { label: 'All Time', fn: applyAllTime },
+            ].map(({ label, fn, emerald }) => (
+              <button key={label} onClick={fn}
+                className={`text-xs px-3 py-1 rounded-full border transition-colors ${emerald ? 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950' : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Summary */}
         {!loading && expenses.length > 0 && (
-          <p className="text-sm text-gray-500 mb-3">
-            Showing {expenses.length}{totalCount > expenses.length ? ` of ${totalCount}` : ''} expense{totalCount !== 1 ? 's' : ''} · Total:{' '}
-            <span className="font-semibold text-gray-900 dark:text-gray-100">
-              {expenses[0]?.currency} {total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mb-3">
+            <span>
+              Showing {expenses.length}{totalCount > expenses.length ? ` of ${totalCount}` : ''} transaction{totalCount !== 1 ? 's' : ''}
             </span>
-          </p>
+            <span>
+              Expenses:{' '}
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {expenses[0]?.currency} {expenseTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </span>
+            {incomeTotal > 0 && (
+              <span>
+                Income:{' '}
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  +{expenses[0]?.currency} {incomeTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </span>
+            )}
+          </div>
         )}
 
         {/* Table */}
