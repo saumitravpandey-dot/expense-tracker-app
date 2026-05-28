@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getDb();
-    const rules = db.prepare('SELECT * FROM transaction_rules ORDER BY id ASC').all() as MappingRule[];
+    const rules = db.prepare('SELECT * FROM transaction_rules ORDER BY priority DESC, id ASC').all() as MappingRule[];
     const SYSTEM = buildSystemPrompt(includeCredits);
 
     let rawText = '';

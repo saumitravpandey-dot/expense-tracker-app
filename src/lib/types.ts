@@ -59,6 +59,10 @@ export interface MappingRule {
   category: string;
   action: 'include' | 'exclude';
   enabled: number;
+  priority: number;
+  note: string;
+  amount_min: number | null;
+  amount_max: number | null;
 }
 
 export const CATEGORIES = [

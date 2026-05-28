@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = db.prepare('SELECT * FROM transaction_rules WHERE id = ?').get(Number(id));
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const fields = ['pattern', 'match_type', 'apply_to', 'tx_type', 'category', 'action', 'enabled'];
+  const fields = ['pattern', 'match_type', 'apply_to', 'tx_type', 'category', 'action', 'enabled', 'priority', 'note'];
   const updates: string[] = [];
   const values: unknown[] = [];
 
