@@ -67,6 +67,8 @@ function ExpensesPageInner() {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkCategoryTarget, setBulkCategoryTarget] = useState('');
+  const [bulkCategorizing, setBulkCategorizing] = useState(false);
   const [sortCol, setSortCol] = useState<'date' | 'amount' | 'merchant' | 'category'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,6 +171,22 @@ function ExpensesPageInner() {
     setBulkDeleting(false);
   }
 
+  async function handleBulkCategorize() {
+    if (!bulkCategoryTarget || selected.size === 0) return;
+    setBulkCategorizing(true);
+    await Promise.all([...selected].map(id =>
+      fetch(`/api/expenses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: bulkCategoryTarget }),
+      })
+    ));
+    setExpenses(prev => prev.map(e => selected.has(e.id) ? { ...e, category: bulkCategoryTarget } : e));
+    setSelected(new Set());
+    setBulkCategoryTarget('');
+    setBulkCategorizing(false);
+  }
+
   function toggleSelect(id: number) {
     setSelected(prev => {
       const s = new Set(prev);
@@ -244,13 +262,33 @@ function ExpensesPageInner() {
           <h1 className="text-2xl font-bold">All Expenses</h1>
           <div className="flex items-center gap-2">
             {selected.size > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                disabled={bulkDeleting}
-                className="text-sm px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg"
-              >
-                {bulkDeleting ? 'Deleting…' : `Delete ${selected.size} selected`}
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-gray-500">{selected.size} selected</span>
+                <select
+                  value={bulkCategoryTarget}
+                  onChange={e => setBulkCategoryTarget(e.target.value)}
+                  className="text-sm border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-900"
+                >
+                  <option value="">Re-categorize…</option>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                {bulkCategoryTarget && (
+                  <button
+                    onClick={handleBulkCategorize}
+                    disabled={bulkCategorizing}
+                    className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg"
+                  >
+                    {bulkCategorizing ? '…' : 'Apply'}
+                  </button>
+                )}
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="text-sm px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg"
+                >
+                  {bulkDeleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
             )}
             <button onClick={exportCsv} className="text-sm px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
               Export CSV
