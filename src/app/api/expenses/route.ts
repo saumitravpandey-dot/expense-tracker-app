@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
+  const search = searchParams.get('search');
 
   let query = 'SELECT * FROM expenses WHERE 1=1';
   const params: (string | number)[] = [];
@@ -25,8 +26,13 @@ export async function GET(req: NextRequest) {
     query += ' AND date <= ?';
     params.push(to);
   }
+  if (search) {
+    query += ' AND (merchant LIKE ? OR description LIKE ? OR category LIKE ?)';
+    const term = `%${search}%`;
+    params.push(term, term, term);
+  }
 
-  query += ' ORDER BY date DESC, id DESC';
+  query += ' ORDER BY date DESC, id DESC LIMIT 200';
 
   const expenses = db.prepare(query).all(...params) as Expense[];
   return NextResponse.json(expenses);

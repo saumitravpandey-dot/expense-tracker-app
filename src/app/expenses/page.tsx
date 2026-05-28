@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
 import { CATEGORIES } from '@/lib/types';
@@ -38,9 +38,19 @@ export default function ExpensesPage() {
   const [category, setCategory] = useState('All');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState<number | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounce search input
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchExpenses(), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
@@ -48,10 +58,11 @@ export default function ExpensesPage() {
     if (category !== 'All') params.set('category', category);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
+    if (search.trim()) params.set('search', search.trim());
     const res = await fetch(`/api/expenses?${params}`);
     setExpenses(await res.json());
     setLoading(false);
-  }, [category, from, to]);
+  }, [category, from, to, search]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -134,6 +145,20 @@ export default function ExpensesPage() {
 
         {/* Filters */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 mb-6 space-y-3">
+          {/* Search */}
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by merchant, category, or description…"
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg pl-9 pr-4 py-2 text-sm bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            )}
+          </div>
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Category</label>
@@ -154,7 +179,7 @@ export default function ExpensesPage() {
                 className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
             </div>
             <button onClick={fetchExpenses} className="px-4 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">Filter</button>
-            <button onClick={() => { setCategory('All'); setFrom(''); setTo(''); }}
+            <button onClick={() => { setCategory('All'); setFrom(''); setTo(''); setSearch(''); }}
               className="px-4 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
           </div>
 

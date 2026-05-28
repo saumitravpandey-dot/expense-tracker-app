@@ -19,6 +19,46 @@ export interface ParsedExpense {
   description: string;
 }
 
+export const TRANSACTION_TYPES = [
+  'expense',
+  'transfer',
+  'investment',
+  'loan_emi',
+  'insurance',
+  'bank_fee',
+  'cc_payment',
+  'cash',
+] as const;
+
+export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
+export const TRANSACTION_TYPE_CONFIG: Record<TransactionType, {
+  label: string;
+  color: string;
+  defaultInclude: boolean;
+  description: string;
+}> = {
+  expense:    { label: 'Expense',     color: '#22c55e', defaultInclude: true,  description: 'Regular merchant spending' },
+  transfer:   { label: 'Transfer',    color: '#3b82f6', defaultInclude: false, description: 'Own account or family transfers' },
+  investment: { label: 'Investment',  color: '#a855f7', defaultInclude: false, description: 'MF SIP, FD, stocks, bonds' },
+  loan_emi:   { label: 'Loan EMI',    color: '#f97316', defaultInclude: true,  description: 'Home, car, personal loan EMI' },
+  insurance:  { label: 'Insurance',   color: '#06b6d4', defaultInclude: true,  description: 'LIC, health, vehicle insurance' },
+  bank_fee:   { label: 'Bank Fee',    color: '#ef4444', defaultInclude: true,  description: 'Service charges, late fees' },
+  cc_payment: { label: 'CC Payment',  color: '#eab308', defaultInclude: false, description: 'Credit card bill settlement — skip to avoid double counting' },
+  cash:       { label: 'Cash (ATM)',  color: '#6b7280', defaultInclude: true,  description: 'ATM withdrawals' },
+};
+
+export interface MappingRule {
+  id: number;
+  pattern: string;
+  match_type: 'contains' | 'startsWith' | 'equals' | 'regex';
+  apply_to: 'description' | 'merchant' | 'both';
+  tx_type: TransactionType;
+  category: string;
+  action: 'include' | 'exclude';
+  enabled: number;
+}
+
 export const CATEGORIES = [
   'Food & Dining',
   'Transport',

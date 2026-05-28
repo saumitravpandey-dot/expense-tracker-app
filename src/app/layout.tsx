@@ -3,7 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Expense Tracker",
-  description: "Track expenses automatically from receipts, emails, and screenshots",
+  description: "Track expenses with AI — import bank statements, set budgets, analyse trends",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Expenses" },
+  formatDetection: { telephone: false },
 };
 
 const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if((t||'')===''?d:t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`;
