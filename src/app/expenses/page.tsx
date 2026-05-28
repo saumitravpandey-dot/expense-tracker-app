@@ -58,6 +58,8 @@ function ExpensesPageInner() {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [sortCol, setSortCol] = useState<'date' | 'amount' | 'merchant' | 'category'>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PAGE_SIZE = 50;
 
@@ -206,6 +208,20 @@ function ExpensesPageInner() {
     URL.revokeObjectURL(url);
   }
 
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('desc'); }
+  }
+
+  const sortedExpenses = [...expenses].sort((a, b) => {
+    let cmp = 0;
+    if (sortCol === 'date') cmp = a.date.localeCompare(b.date);
+    else if (sortCol === 'amount') cmp = a.amount - b.amount;
+    else if (sortCol === 'merchant') cmp = a.merchant.localeCompare(b.merchant);
+    else if (sortCol === 'category') cmp = a.category.localeCompare(b.category);
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
   const total = expenses.reduce((s, e) => s + e.amount, 0);
 
   return (
@@ -322,16 +338,16 @@ function ExpensesPageInner() {
                       className="rounded"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-left">Merchant</th>
-                  <th className="px-4 py-3 text-left">Category</th>
+                  <SortTh col="date" label="Date" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="px-4 py-3 text-left" />
+                  <SortTh col="merchant" label="Merchant" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="px-4 py-3 text-left" />
+                  <SortTh col="category" label="Category" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="px-4 py-3 text-left" />
                   <th className="hidden sm:table-cell px-4 py-3 text-left">Type</th>
-                  <th className="px-4 py-3 text-right">Amount</th>
+                  <SortTh col="amount" label="Amount" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="px-4 py-3 text-right" />
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {expenses.map(e => (
+                {sortedExpenses.map(e => (
                   editing?.id === e.id ? (
                     /* ── Inline edit row ── */
                     <tr key={e.id} className="bg-emerald-50 dark:bg-emerald-950/30">
@@ -430,6 +446,28 @@ function ExpensesPageInner() {
         )}
       </main>
     </>
+  );
+}
+
+function SortTh({ col, label, sortCol, sortDir, onSort, className }: {
+  col: 'date' | 'amount' | 'merchant' | 'category';
+  label: string;
+  sortCol: string;
+  sortDir: 'asc' | 'desc';
+  onSort: (col: 'date' | 'amount' | 'merchant' | 'category') => void;
+  className?: string;
+}) {
+  const active = sortCol === col;
+  return (
+    <th className={className}>
+      <button
+        onClick={() => onSort(col)}
+        className={`flex items-center gap-1 font-medium uppercase tracking-wide text-xs ${active ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+      >
+        {label}
+        <span className="text-[10px]">{active ? (sortDir === 'asc' ? '▲' : '▼') : '⇕'}</span>
+      </button>
+    </th>
   );
 }
 

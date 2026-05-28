@@ -5,8 +5,6 @@ import Nav from '@/components/Nav';
 import { CATEGORIES, CATEGORY_COLORS } from '@/lib/types';
 import type { Budget } from '@/app/api/budgets/route';
 
-interface CategorySpend { category: string; total: number; }
-
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [spends, setSpends] = useState<Record<string, number>>({});
@@ -18,16 +16,15 @@ export default function BudgetsPage() {
     fetch('/api/budgets').then(r => r.json()).then(setBudgets);
 
     const now = new Date();
-    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const to = now.toISOString().split('T')[0];
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    fetch(`/api/expenses?from=${from}&to=${to}`)
+    fetch(`/api/budgets/progress?month=${month}`)
       .then(r => r.json())
-      .then((expenses: { category: string; amount: number; currency: string }[]) => {
+      .then((rows: { category: string; total: number; currency: string }[]) => {
         const map: Record<string, number> = {};
-        for (const e of expenses) {
-          map[e.category] = (map[e.category] ?? 0) + e.amount;
-          if (e.currency) setCurrency(e.currency);
+        for (const r of rows) {
+          map[r.category] = r.total;
+          if (r.currency) setCurrency(r.currency);
         }
         setSpends(map);
       });
