@@ -23,7 +23,7 @@ export default function AddPage() {
     <>
       <Nav />
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Add Expense</h1>
+        <h1 className="text-2xl font-bold mb-6">Add Transaction</h1>
 
         {/* Mode tabs */}
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl mb-6">

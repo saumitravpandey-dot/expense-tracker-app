@@ -9,12 +9,14 @@ interface Props {
   prefill?: Partial<ParsedExpense>;
   source?: 'manual' | 'ocr' | 'email' | 'text';
   onCancel?: () => void;
+  defaultType?: 'expense' | 'income';
 }
 
-export default function ExpenseForm({ prefill, source = 'manual', onCancel }: Props) {
+export default function ExpenseForm({ prefill, source = 'manual', onCancel, defaultType = 'expense' }: Props) {
   const router = useRouter();
   const today = new Date().toISOString().split('T')[0];
 
+  const [txType, setTxType] = useState<'expense' | 'income'>(defaultType);
   const [amount, setAmount] = useState(prefill?.amount?.toString() ?? '');
   const [currency, setCurrency] = useState(prefill?.currency || 'INR');
   const [merchant, setMerchant] = useState(prefill?.merchant ?? '');
@@ -33,7 +35,7 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel }: Pr
     const res = await fetch('/api/expenses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: parseFloat(amount), currency, merchant, category, date, description, source }),
+      body: JSON.stringify({ amount: parseFloat(amount), currency, merchant, category, date, description, source, transaction_type: txType }),
     });
 
     if (res.ok) {
@@ -49,6 +51,18 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel }: Pr
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-950 px-3 py-2 rounded-lg">{error}</p>}
+
+      {/* Expense / Income toggle */}
+      <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+        <button type="button" onClick={() => setTxType('expense')}
+          className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${txType === 'expense' ? 'bg-white dark:bg-gray-900 shadow text-gray-900 dark:text-gray-100' : 'text-gray-500'}`}>
+          Expense
+        </button>
+        <button type="button" onClick={() => setTxType('income')}
+          className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${txType === 'income' ? 'bg-white dark:bg-gray-900 shadow text-emerald-700 dark:text-emerald-400' : 'text-gray-500'}`}>
+          Income
+        </button>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -129,7 +143,7 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel }: Pr
           disabled={saving}
           className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors"
         >
-          {saving ? 'Saving…' : 'Save Expense'}
+          {saving ? 'Saving…' : txType === 'income' ? 'Save Income' : 'Save Expense'}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="px-5 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">

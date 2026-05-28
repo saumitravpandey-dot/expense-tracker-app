@@ -46,6 +46,7 @@ export default function ImportPage() {
   const [importedCount, setImportedCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all');
+  const [includeCredits, setIncludeCredits] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function processFile(file: File) {
@@ -59,7 +60,7 @@ export default function ImportPage() {
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, content }),
+        body: JSON.stringify({ type, content, includeCredits }),
       });
 
       const data = await res.json();
@@ -182,6 +183,19 @@ export default function ImportPage() {
               </span>
             </div>
             <input ref={fileRef} type="file" accept=".pdf,.csv,text/csv,application/pdf" className="hidden" onChange={handleFileChange} />
+
+            {/* Include credits toggle */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div
+                onClick={() => setIncludeCredits(s => !s)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${includeCredits ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+              >
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${includeCredits ? 'translate-x-4' : 'translate-x-1'}`} />
+              </div>
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Also capture income/credits (salary, UPI received)
+              </span>
+            </label>
 
             <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-5 text-sm space-y-1.5 text-gray-500">
               <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">How to download your statement</p>

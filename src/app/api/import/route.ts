@@ -17,8 +17,12 @@ export interface ImportedTransaction {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM = `You are a bank statement parser for Indian banks (HDFC, ICICI, SBI, Axis, Kotak, etc.).
-Extract ALL debit transactions — money going OUT of the account.
+function buildSystemPrompt(includeCredits: boolean) {
+  return `You are a bank statement parser for Indian banks (HDFC, ICICI, SBI, Axis, Kotak, etc.).
+${includeCredits
+  ? 'Extract ALL transactions — both debits (money OUT) and credits (money IN such as salary, UPI received, interest).'
+  : 'Extract ALL debit transactions — money going OUT of the account.'
+}
 
 Return ONLY a raw JSON array, no markdown fences, no explanation:
 [{"date":"YYYY-MM-DD","amount":1234.50,"currency":"INR","merchant":"merchant name","category":"Food & Dining","description":"original line from statement","transaction_type":"expense"}]
@@ -28,6 +32,7 @@ transaction_type must be exactly one of: ${TRANSACTION_TYPES.join(', ')}
 
 Transaction type guide:
 - expense: regular merchant purchases (food, shopping, services)
+- income: salary, freelance payment, UPI received, interest earned, dividends
 - transfer: own account transfers, NEFT/IMPS to self/family
 - investment: MF SIP, FD creation, stock purchase, ZERODHA/GROWW
 - loan_emi: home/car/personal loan EMI
@@ -37,12 +42,12 @@ Transaction type guide:
 - cash: ATM withdrawal
 
 Rules:
-- Only include DEBITS (withdrawals, purchases, payments, UPI debits, NEFT/RTGS sent)
-- SKIP: credits, salary, interest earned, refunds, opening/closing balance lines
 - amount = positive number (never negative)
 - date = YYYY-MM-DD (convert DD-MM-YYYY or DD/MM/YY formats)
 - merchant = clean payee name (strip UPI IDs, ref numbers, branch codes)
-- If currency symbol is ₹ or Rs use "INR"`;
+- If currency symbol is ₹ or Rs use "INR"
+${includeCredits ? '- Include both debits AND credits; set transaction_type appropriately' : '- SKIP: credits, salary, interest earned, refunds, opening/closing balance lines'}`;
+}
 
 function applyRules(
   tx: { description: string; merchant: string },
@@ -82,7 +87,7 @@ function applyRules(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { type, content } = body as { type: 'pdf' | 'csv'; content: string };
+    const { type, content, includeCredits = false } = body as { type: 'pdf' | 'csv'; content: string; includeCredits?: boolean };
 
     if (!content) {
       return NextResponse.json({ error: 'content is required' }, { status: 400 });
@@ -90,6 +95,7 @@ export async function POST(req: NextRequest) {
 
     const db = getDb();
     const rules = db.prepare('SELECT * FROM transaction_rules ORDER BY id ASC').all() as MappingRule[];
+    const SYSTEM = buildSystemPrompt(includeCredits);
 
     let rawText = '';
 
@@ -121,7 +127,7 @@ export async function POST(req: NextRequest) {
         system: SYSTEM,
         messages: [{
           role: 'user',
-          content: `Extract all debit transactions from this CSV bank statement:\n\n${content}`,
+          content: `Extract all ${includeCredits ? '' : 'debit '}transactions from this CSV bank statement:\n\n${content}`,
         }],
       });
       rawText = msg.content.find(b => b.type === 'text')?.text ?? '[]';

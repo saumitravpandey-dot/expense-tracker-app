@@ -33,14 +33,18 @@ function DashboardInner() {
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   const monthEnd = now.toISOString().split('T')[0];
 
-  const monthTotal = (db.prepare(
-    `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ?`
+  const monthExpenses = (db.prepare(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ? AND transaction_type != 'income'`
+  ).get(monthStart, monthEnd) as { total: number }).total;
+
+  const monthIncome = (db.prepare(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ? AND transaction_type = 'income'`
   ).get(monthStart, monthEnd) as { total: number }).total;
 
   const currency = (db.prepare(`SELECT currency FROM expenses ORDER BY id DESC LIMIT 1`).get() as { currency: string } | undefined)?.currency ?? 'INR';
 
   const byCategory = db.prepare(
-    `SELECT category, SUM(amount) as total FROM expenses WHERE date >= ? AND date <= ? GROUP BY category ORDER BY total DESC`
+    `SELECT category, SUM(amount) as total FROM expenses WHERE date >= ? AND date <= ? AND transaction_type != 'income' GROUP BY category ORDER BY total DESC`
   ).all(monthStart, monthEnd) as CategoryTotal[];
 
   const budgets = db.prepare(`SELECT * FROM budgets`).all() as Budget[];
@@ -53,8 +57,8 @@ function DashboardInner() {
     `SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT 8`
   ).all() as Expense[];
 
-  const allTimeTotal = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses`).get() as { total: number }).total;
-  const count = (db.prepare(`SELECT COUNT(*) as c FROM expenses`).get() as { c: number }).c;
+  const allTimeTotal = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE transaction_type != 'income'`).get() as { total: number }).total;
+  const count = (db.prepare(`SELECT COUNT(*) as c FROM expenses WHERE transaction_type != 'income'`).get() as { c: number }).c;
 
   const maxCat = byCategory[0]?.total ?? 1;
 
@@ -64,9 +68,20 @@ function DashboardInner() {
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
 
         {/* Stats row */}
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="This Month" value={`${currency} ${monthTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sub={new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} />
-          <StatCard label="All Time" value={`${currency} ${allTimeTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sub={`${count} expense${count !== 1 ? 's' : ''} recorded`} />
+        <div className="grid grid-cols-4 gap-4">
+          <StatCard label="Spent This Month" value={`${currency} ${monthExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sub={new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} />
+          <StatCard
+            label="Income This Month"
+            value={monthIncome > 0 ? `${currency} ${monthIncome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+            sub={monthIncome > 0 ? 'credited' : 'Add income →'}
+            href={monthIncome === 0 ? '/add' : undefined}
+          />
+          <StatCard
+            label="Net Savings"
+            value={monthIncome > 0 ? `${currency} ${(monthIncome - monthExpenses).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+            sub={monthIncome > 0 ? `${Math.round(((monthIncome - monthExpenses) / monthIncome) * 100)}% saved` : 'Track income to see'}
+            alert={monthIncome > 0 && monthIncome < monthExpenses}
+          />
           <StatCard
             label="Budget Alerts"
             value={overBudgetCount > 0 ? `${overBudgetCount} over` : budgets.length > 0 ? 'On track ✓' : 'None set'}

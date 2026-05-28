@@ -21,6 +21,7 @@ export interface ParsedExpense {
 
 export const TRANSACTION_TYPES = [
   'expense',
+  'income',
   'transfer',
   'investment',
   'loan_emi',
@@ -39,6 +40,7 @@ export const TRANSACTION_TYPE_CONFIG: Record<TransactionType, {
   description: string;
 }> = {
   expense:    { label: 'Expense',     color: '#22c55e', defaultInclude: true,  description: 'Regular merchant spending' },
+  income:     { label: 'Income',      color: '#10b981', defaultInclude: true,  description: 'Salary, freelance, interest earned' },
   transfer:   { label: 'Transfer',    color: '#3b82f6', defaultInclude: false, description: 'Own account or family transfers' },
   investment: { label: 'Investment',  color: '#a855f7', defaultInclude: false, description: 'MF SIP, FD, stocks, bonds' },
   loan_emi:   { label: 'Loan EMI',    color: '#f97316', defaultInclude: true,  description: 'Home, car, personal loan EMI' },
