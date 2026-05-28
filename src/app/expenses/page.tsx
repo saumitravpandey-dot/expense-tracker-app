@@ -15,6 +15,7 @@ interface EditState {
   category: string;
   date: string;
   description: string;
+  transaction_type: string;
 }
 
 function thisMonth() {
@@ -110,6 +111,7 @@ function ExpensesPageInner() {
       category: e.category,
       date: e.date,
       description: e.description,
+      transaction_type: (e as Expense & { transaction_type?: string }).transaction_type ?? 'expense',
     });
   }
 
@@ -126,6 +128,7 @@ function ExpensesPageInner() {
         category: editing.category,
         date: editing.date,
         description: editing.description,
+        transaction_type: editing.transaction_type,
       }),
     });
     if (res.ok) {
@@ -342,7 +345,12 @@ function ExpensesPageInner() {
                           {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                         </select>
                       </td>
-                      <td className="hidden sm:table-cell px-2 py-2 text-xs text-gray-400 capitalize">{(e as Expense & { transaction_type?: string }).transaction_type ?? 'expense'}</td>
+                      <td className="hidden sm:table-cell px-2 py-2">
+                        <select value={editing.transaction_type} onChange={ev => setEditing(s => s && ({ ...s, transaction_type: ev.target.value }))}
+                          className="border border-gray-300 dark:border-gray-700 rounded px-1 py-1 text-xs bg-white dark:bg-gray-900">
+                          {TRANSACTION_TYPES.map(t => <option key={t} value={t}>{TRANSACTION_TYPE_CONFIG[t].label}</option>)}
+                        </select>
+                      </td>
                       <td className="px-2 py-2 text-right">
                         <div className="flex gap-1 justify-end">
                           <select value={editing.currency} onChange={ev => setEditing(s => s && ({ ...s, currency: ev.target.value }))}

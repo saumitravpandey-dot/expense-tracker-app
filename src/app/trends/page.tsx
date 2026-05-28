@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
+import InsightsCard from '@/components/InsightsCard';
 import { getDb } from '@/lib/db';
 import { CATEGORY_COLORS } from '@/lib/types';
 
@@ -9,6 +10,7 @@ interface MerchantRow { merchant: string; total: number; count: number; }
 interface DowRow { dow: number; total: number; }
 interface CategoryRow { category: string; total: number; }
 interface DayRow { day: string; total: number; }
+interface SubscriptionRow { merchant: string; avg_amount: number; months_count: number; last_date: string; category: string; currency: string; }
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -112,6 +114,25 @@ export default function TrendsPage() {
 
   const thisMonthTotal = monthMap[thisMonthStr] ?? 0;
   const anomalyPct = threeMonthAvg > 0 ? Math.round(((thisMonthTotal - threeMonthAvg) / threeMonthAvg) * 100) : null;
+
+  // ── Recurring subscriptions (consistent monthly charges) ──
+  const subscriptions = db.prepare(`
+    SELECT
+      TRIM(merchant) as merchant,
+      AVG(amount) as avg_amount,
+      COUNT(DISTINCT strftime('%Y-%m', date)) as months_count,
+      MAX(date) as last_date,
+      MAX(category) as category,
+      MAX(currency) as currency
+    FROM expenses
+    WHERE merchant != ''
+      AND transaction_type IN ('expense', 'insurance', 'loan_emi', 'bank_fee')
+      AND date >= date('now', '-6 months')
+    GROUP BY LOWER(TRIM(merchant))
+    HAVING months_count >= 2 AND (MAX(amount) - MIN(amount)) / MAX(amount) < 0.1
+    ORDER BY avg_amount DESC
+    LIMIT 10
+  `).all() as SubscriptionRow[];
 
   const totalExpenses = (db.prepare(`SELECT COUNT(*) as c FROM expenses`).get() as { c: number }).c;
 
@@ -309,6 +330,34 @@ export default function TrendsPage() {
             })}
           </div>
         </div>
+
+        {/* Recurring charges */}
+        {subscriptions.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-semibold">Recurring Charges</h2>
+              <span className="text-xs text-gray-400">Detected from last 6 months</span>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Merchants with consistent charges in 2+ months</p>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {subscriptions.map(s => (
+                <div key={s.merchant} className="flex items-center justify-between py-2.5 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.merchant}</p>
+                    <p className="text-xs text-gray-400">{s.months_count} months · last {s.last_date}</p>
+                  </div>
+                  <CategoryBadge category={s.category} />
+                  <span className="font-mono text-sm font-semibold shrink-0">
+                    {s.currency} {Math.round(s.avg_amount).toLocaleString('en-IN')}/mo
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* AI Insights */}
+        <InsightsCard month={thisMonthStr} />
 
       </main>
     </>
