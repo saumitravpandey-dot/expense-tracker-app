@@ -6,7 +6,7 @@ export interface Expense {
   category: string;
   date: string; // YYYY-MM-DD
   description: string;
-  source: 'manual' | 'ocr' | 'email' | 'text';
+  source: 'manual' | 'ocr' | 'email' | 'text' | 'import';
   created_at: string;
 }
 
