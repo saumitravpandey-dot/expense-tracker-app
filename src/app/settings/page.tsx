@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Nav from '@/components/Nav';
 import Link from 'next/link';
 
@@ -18,6 +18,9 @@ export default function SettingsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [exporting, setExporting] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; budgetsImported: number; rulesImported: number } | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch('/api/settings/stats').then(r => r.json()).then(setStats).catch(() => {});
@@ -47,6 +50,31 @@ export default function SettingsPage() {
     a.download = `expenses-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await fetch('/api/settings/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setImportResult(result);
+        fetch('/api/settings/stats').then(r => r.json()).then(setStats).catch(() => {});
+      }
+    } catch {
+      alert('Failed to parse backup file. Make sure it is a valid JSON backup.');
+    }
+    setImporting(false);
+    if (importRef.current) importRef.current.value = '';
   }
 
   async function clearData() {
@@ -105,6 +133,30 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400 mt-3">
             JSON backup includes expenses, budgets, and rules — can be imported later.
             CSV is useful for spreadsheet analysis.
+          </p>
+        </section>
+
+        {/* Import */}
+        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 mb-6">
+          <h2 className="font-semibold mb-1">Import from Backup</h2>
+          <p className="text-sm text-gray-500 mb-4">Restore from a previously exported JSON backup file.</p>
+          {importResult && (
+            <div className="mb-4 px-4 py-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-xl text-sm text-emerald-700 dark:text-emerald-300">
+              ✓ Imported {importResult.imported} expenses ({importResult.skipped} skipped), {importResult.budgetsImported} budgets, {importResult.rulesImported} rules.
+            </div>
+          )}
+          <div className="flex gap-3 flex-wrap items-center">
+            <button
+              onClick={() => importRef.current?.click()}
+              disabled={importing}
+              className="px-5 py-2 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium rounded-xl text-sm disabled:opacity-50"
+            >
+              {importing ? 'Importing…' : 'Choose backup .json'}
+            </button>
+          </div>
+          <input ref={importRef} type="file" accept=".json,application/json" className="hidden" onChange={handleImport} />
+          <p className="text-xs text-gray-400 mt-3">
+            Expenses are added without removing existing data. Budgets are upserted. Duplicate rules are skipped.
           </p>
         </section>
 
