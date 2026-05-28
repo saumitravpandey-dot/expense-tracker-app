@@ -140,6 +140,7 @@ export default function ImportPage() {
   const visibleRows = typeFilter === 'all' ? rows : rows.filter(r => r.transaction_type === typeFilter);
   const checkedCount = rows.filter(r => r.checked).length;
   const checkedTotal = rows.filter(r => r.checked).reduce((s, r) => s + Number(r.amount), 0);
+  const duplicateCount = rows.filter(r => r.duplicate).length;
 
   const typeCounts = rows.reduce<Record<string, number>>((acc, r) => {
     acc[r.transaction_type] = (acc[r.transaction_type] ?? 0) + 1;
@@ -225,6 +226,9 @@ export default function ImportPage() {
                 <p className="font-semibold text-lg">{rows.length} transactions extracted</p>
                 <p className="text-sm text-gray-500">
                   {checkedCount} selected · {rows[0]?.currency ?? 'INR'} {checkedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  {duplicateCount > 0 && (
+                    <span className="ml-2 text-yellow-600 dark:text-yellow-400">· {duplicateCount} possible duplicate{duplicateCount !== 1 ? 's' : ''} (unchecked)</span>
+                  )}
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap">
@@ -299,12 +303,19 @@ export default function ImportPage() {
                         </td>
                         <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap text-xs">{row.date}</td>
                         <td className="px-3 py-2.5">
-                          <input
-                            type="text"
-                            value={row.merchant}
-                            onChange={e => updateField(i, 'merchant', e.target.value)}
-                            className="w-full bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-emerald-500 focus:outline-none px-0 py-0.5 font-medium"
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={row.merchant}
+                              onChange={e => updateField(i, 'merchant', e.target.value)}
+                              className="flex-1 bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-emerald-500 focus:outline-none px-0 py-0.5 font-medium"
+                            />
+                            {row.duplicate && (
+                              <span className="shrink-0 text-xs px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-400 rounded border border-yellow-200 dark:border-yellow-800">
+                                ⚠ duplicate
+                              </span>
+                            )}
+                          </div>
                           {row.description && row.description !== row.merchant && (
                             <p className="text-xs text-gray-400 truncate max-w-xs mt-0.5">{row.description}</p>
                           )}

@@ -149,10 +149,10 @@ function DashboardInner({ month }: { month: string }) {
                   return (
                     <div key={c.category}>
                       <div className="flex justify-between text-sm mb-1">
-                        <span className="truncate mr-2 flex items-center gap-1">
+                        <Link href={`/expenses?from=${monthStart}&to=${monthEnd}&category=${encodeURIComponent(c.category)}`} className="truncate mr-2 flex items-center gap-1 hover:text-emerald-600 dark:hover:text-emerald-400">
                           {over && <span className="text-red-500 text-xs">!</span>}
                           {c.category}
-                        </span>
+                        </Link>
                         <span className={`font-mono text-xs shrink-0 ${over ? 'text-red-500' : warn ? 'text-yellow-600' : 'text-gray-500'}`}>
                           {currency} {c.total.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
                           {budget ? <span className="text-gray-400">/{budget.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</span> : null}

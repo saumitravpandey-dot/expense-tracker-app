@@ -48,7 +48,7 @@ function ExpensesPageInner() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [category, setCategory] = useState('All');
+  const [category, setCategory] = useState(sp.get('category') ?? 'All');
   const [txType, setTxType] = useState('all');
   const [from, setFrom] = useState(sp.get('from') ?? '');
   const [to, setTo] = useState(sp.get('to') ?? '');
@@ -181,16 +181,27 @@ function ExpensesPageInner() {
     const r = lastMonth(); setFrom(r.from); setTo(r.to);
   }
 
-  function exportCsv() {
+  async function exportCsv() {
+    // Export all matching rows (not just loaded page) via server
+    const params = new URLSearchParams();
+    if (category !== 'All') params.set('category', category);
+    if (txType !== 'all') params.set('txType', txType);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (search.trim()) params.set('search', search.trim());
+    params.set('limit', '500');
+    params.set('offset', '0');
+    const res = await fetch(`/api/expenses?${params}`);
+    const all: (Expense & { transaction_type?: string })[] = await res.json();
     const header = 'Date,Merchant,Category,Type,Amount,Currency,Description,Source';
-    const rows = expenses.map(e =>
-      [e.date, `"${e.merchant}"`, `"${e.category}"`, (e as Expense & { transaction_type?: string }).transaction_type ?? 'expense', e.amount, e.currency, `"${e.description}"`, e.source].join(',')
+    const rows = all.map(e =>
+      [e.date, `"${e.merchant}"`, `"${e.category}"`, e.transaction_type ?? 'expense', e.amount, e.currency, `"${e.description}"`, e.source].join(',')
     );
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'expenses.csv';
+    a.download = `expenses-${from || 'all'}-${to || 'all'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
