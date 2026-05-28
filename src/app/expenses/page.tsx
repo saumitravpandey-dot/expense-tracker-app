@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
-import { CATEGORIES } from '@/lib/types';
+import { CATEGORIES, TRANSACTION_TYPES, TRANSACTION_TYPE_CONFIG } from '@/lib/types';
 import type { Expense } from '@/lib/types';
 
 interface EditState {
@@ -48,6 +48,7 @@ function ExpensesPageInner() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [category, setCategory] = useState('All');
+  const [txType, setTxType] = useState('all');
   const [from, setFrom] = useState(sp.get('from') ?? '');
   const [to, setTo] = useState(sp.get('to') ?? '');
   const [search, setSearch] = useState('');
@@ -70,6 +71,7 @@ function ExpensesPageInner() {
   function buildParams(offset = 0) {
     const params = new URLSearchParams();
     if (category !== 'All') params.set('category', category);
+    if (txType !== 'all') params.set('txType', txType);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (search.trim()) params.set('search', search.trim());
@@ -87,7 +89,7 @@ function ExpensesPageInner() {
     setTotalCount(parseInt(res.headers.get('X-Total-Count') ?? '0', 10));
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, from, to, search]);
+  }, [category, txType, from, to, search]);
 
   async function loadMore() {
     setLoadingMore(true);
@@ -177,9 +179,9 @@ function ExpensesPageInner() {
   }
 
   function exportCsv() {
-    const header = 'Date,Merchant,Category,Amount,Currency,Description,Source';
+    const header = 'Date,Merchant,Category,Type,Amount,Currency,Description,Source';
     const rows = expenses.map(e =>
-      [e.date, `"${e.merchant}"`, `"${e.category}"`, e.amount, e.currency, `"${e.description}"`, e.source].join(',')
+      [e.date, `"${e.merchant}"`, `"${e.category}"`, (e as Expense & { transaction_type?: string }).transaction_type ?? 'expense', e.amount, e.currency, `"${e.description}"`, e.source].join(',')
     );
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -240,6 +242,16 @@ function ExpensesPageInner() {
               </select>
             </div>
             <div>
+              <label className="block text-xs text-gray-500 mb-1">Type</label>
+              <select value={txType} onChange={e => setTxType(e.target.value)}
+                className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900">
+                <option value="all">All Types</option>
+                {TRANSACTION_TYPES.map(t => (
+                  <option key={t} value={t}>{TRANSACTION_TYPE_CONFIG[t].label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="block text-xs text-gray-500 mb-1">From</label>
               <input type="date" value={from} onChange={e => setFrom(e.target.value)}
                 className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
@@ -250,7 +262,7 @@ function ExpensesPageInner() {
                 className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
             </div>
             <button onClick={fetchExpenses} className="px-4 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">Filter</button>
-            <button onClick={() => { setCategory('All'); setFrom(''); setTo(''); setSearch(''); }}
+            <button onClick={() => { setCategory('All'); setTxType('all'); setFrom(''); setTo(''); setSearch(''); }}
               className="px-4 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
           </div>
 
@@ -299,8 +311,8 @@ function ExpensesPageInner() {
                   <th className="px-4 py-3 text-left">Date</th>
                   <th className="px-4 py-3 text-left">Merchant</th>
                   <th className="px-4 py-3 text-left">Category</th>
+                  <th className="hidden sm:table-cell px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-right">Amount</th>
-                  <th className="px-4 py-3 text-left">Source</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -330,6 +342,7 @@ function ExpensesPageInner() {
                           {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                         </select>
                       </td>
+                      <td className="hidden sm:table-cell px-2 py-2 text-xs text-gray-400 capitalize">{(e as Expense & { transaction_type?: string }).transaction_type ?? 'expense'}</td>
                       <td className="px-2 py-2 text-right">
                         <div className="flex gap-1 justify-end">
                           <select value={editing.currency} onChange={ev => setEditing(s => s && ({ ...s, currency: ev.target.value }))}
@@ -341,7 +354,6 @@ function ExpensesPageInner() {
                             className="border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900 w-24 text-right" />
                         </div>
                       </td>
-                      <td className="px-2 py-2 text-xs text-gray-400 capitalize">{e.source}</td>
                       <td className="px-2 py-2 text-right space-x-2">
                         <button onClick={saveEdit} disabled={saving}
                           className="text-xs bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700 disabled:opacity-50">
@@ -362,10 +374,14 @@ function ExpensesPageInner() {
                         {e.description && <p className="text-xs text-gray-400 font-normal">{e.description}</p>}
                       </td>
                       <td className="px-4 py-3"><CategoryBadge category={e.category} /></td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold">
-                        {e.currency} {e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <td className="hidden sm:table-cell px-4 py-3">
+                        <TxTypeBadge type={(e as Expense & { transaction_type?: string }).transaction_type ?? 'expense'} />
                       </td>
-                      <td className="px-4 py-3"><span className="text-xs text-gray-400 capitalize">{e.source}</span></td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold">
+                        <span className={(e as Expense & { transaction_type?: string }).transaction_type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : ''}>
+                          {(e as Expense & { transaction_type?: string }).transaction_type === 'income' ? '+' : ''}{e.currency} {e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right space-x-3">
                         <button onClick={() => startEdit(e)} className="text-xs text-blue-500 hover:text-blue-700">Edit</button>
                         <button onClick={() => handleDelete(e.id)} disabled={deleting === e.id}
@@ -395,5 +411,18 @@ function ExpensesPageInner() {
         )}
       </main>
     </>
+  );
+}
+
+function TxTypeBadge({ type }: { type: string }) {
+  const cfg = TRANSACTION_TYPE_CONFIG[type as keyof typeof TRANSACTION_TYPE_CONFIG];
+  if (!cfg || type === 'expense') return null;
+  return (
+    <span
+      className="inline-block text-xs px-2 py-0.5 rounded-full font-medium"
+      style={{ backgroundColor: cfg.color + '22', color: cfg.color }}
+    >
+      {cfg.label}
+    </span>
   );
 }

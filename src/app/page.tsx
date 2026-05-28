@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
 import MonthNav from '@/components/MonthNav';
+import BudgetAlertBanner from '@/components/BudgetAlertBanner';
 import { getDb } from '@/lib/db';
 import { CATEGORY_COLORS } from '@/lib/types';
 import type { Expense } from '@/lib/types';
@@ -71,7 +72,10 @@ function DashboardInner({ month }: { month: string }) {
   const budgetMap: Record<string, number> = {};
   for (const b of budgets) budgetMap[b.category] = b.amount;
 
-  const overBudgetCount = byCategory.filter(c => budgetMap[c.category] && c.total > budgetMap[c.category]).length;
+  const overBudgetAlerts = byCategory
+    .filter(c => budgetMap[c.category] && c.total > budgetMap[c.category])
+    .map(c => ({ category: c.category, spent: c.total, budget: budgetMap[c.category], currency }));
+  const overBudgetCount = overBudgetAlerts.length;
 
   const recent = db.prepare(
     `SELECT * FROM expenses WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC LIMIT 8`
@@ -92,6 +96,11 @@ function DashboardInner({ month }: { month: string }) {
           <MonthNav month={month} />
           <p className="text-xs text-gray-400">{count} total expense{count !== 1 ? 's' : ''} · {currency} {allTimeTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })} all time</p>
         </div>
+
+        {/* Budget alert banner (client — dismissable) */}
+        {overBudgetAlerts.length > 0 && (
+          <BudgetAlertBanner alerts={overBudgetAlerts} month={month} />
+        )}
 
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

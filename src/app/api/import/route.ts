@@ -13,6 +13,7 @@ export interface ImportedTransaction {
   description: string;
   transaction_type: TransactionType;
   checked: boolean;
+  duplicate?: boolean;
 }
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -138,6 +139,10 @@ export async function POST(req: NextRequest) {
 
     const raw: (ImportedTransaction & { transaction_type?: string })[] = JSON.parse(jsonMatch[0]);
 
+    const dupCheck = db.prepare(
+      `SELECT COUNT(*) as c FROM expenses WHERE date = ? AND ABS(amount - ?) < 0.01 AND LOWER(merchant) = LOWER(?)`
+    );
+
     const transactions: ImportedTransaction[] = raw.map(t => {
       const aiType = (TRANSACTION_TYPES as readonly string[]).includes(t.transaction_type ?? '')
         ? (t.transaction_type as TransactionType)
@@ -149,11 +154,15 @@ export async function POST(req: NextRequest) {
       const category = ruleMatch?.category ? ruleMatch.category : t.category;
       const action = ruleMatch ? ruleMatch.action : 'include';
 
+      const { c } = dupCheck.get(t.date, t.amount, t.merchant ?? '') as { c: number };
+      const duplicate = c > 0;
+
       return {
         ...t,
         transaction_type,
         category,
-        checked: action === 'include' && TRANSACTION_TYPE_CONFIG[transaction_type].defaultInclude,
+        duplicate,
+        checked: !duplicate && action === 'include' && TRANSACTION_TYPE_CONFIG[transaction_type].defaultInclude,
       };
     });
 

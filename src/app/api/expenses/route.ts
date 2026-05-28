@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
   const search = searchParams.get('search');
+  const txType = searchParams.get('txType');
 
   let query = 'SELECT * FROM expenses WHERE 1=1';
   const params: (string | number)[] = [];
@@ -26,6 +27,10 @@ export async function GET(req: NextRequest) {
   if (category && category !== 'All') {
     query += ' AND category = ?';
     params.push(category);
+  }
+  if (txType && txType !== 'all') {
+    query += ' AND transaction_type = ?';
+    params.push(txType);
   }
   if (from) {
     query += ' AND date >= ?';
