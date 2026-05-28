@@ -8,6 +8,7 @@ interface MonthRow { month: string; total: number; }
 interface MerchantRow { merchant: string; total: number; count: number; }
 interface DowRow { dow: number; total: number; }
 interface CategoryRow { category: string; total: number; }
+interface DayRow { day: string; total: number; }
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -34,7 +35,7 @@ export default function TrendsPage() {
   const monthTotals = db.prepare(`
     SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(amount), 0) as total
     FROM expenses
-    WHERE date >= ?
+    WHERE date >= ? AND transaction_type != 'income'
     GROUP BY month
     ORDER BY month
   `).all(`${months[0]}-01`) as MonthRow[];
@@ -51,12 +52,12 @@ export default function TrendsPage() {
 
   const thisCats = db.prepare(`
     SELECT category, SUM(amount) as total FROM expenses
-    WHERE strftime('%Y-%m', date) = ? GROUP BY category ORDER BY total DESC LIMIT 6
+    WHERE strftime('%Y-%m', date) = ? AND transaction_type != 'income' GROUP BY category ORDER BY total DESC LIMIT 6
   `).all(thisMonthStr) as CategoryRow[];
 
   const lastCatsArr = db.prepare(`
     SELECT category, SUM(amount) as total FROM expenses
-    WHERE strftime('%Y-%m', date) = ? GROUP BY category
+    WHERE strftime('%Y-%m', date) = ? AND transaction_type != 'income' GROUP BY category
   `).all(lastMonthStr) as CategoryRow[];
   const lastCatMap: Record<string, number> = {};
   for (const r of lastCatsArr) lastCatMap[r.category] = r.total;
@@ -65,15 +66,31 @@ export default function TrendsPage() {
   const topMerchants = db.prepare(`
     SELECT merchant, SUM(amount) as total, COUNT(*) as count
     FROM expenses
-    WHERE strftime('%Y-%m', date) = ? AND merchant != ''
+    WHERE strftime('%Y-%m', date) = ? AND merchant != '' AND transaction_type != 'income'
     GROUP BY merchant ORDER BY total DESC LIMIT 5
   `).all(thisMonthStr) as MerchantRow[];
 
   // ── Day-of-week pattern (all time) ──
   const dowRows = db.prepare(`
     SELECT CAST(strftime('%w', date) AS INTEGER) as dow, SUM(amount) as total
-    FROM expenses GROUP BY dow ORDER BY dow
+    FROM expenses WHERE transaction_type != 'income' GROUP BY dow ORDER BY dow
   `).all() as DowRow[];
+
+  // ── Day-by-day spending for current month ──
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayRows = db.prepare(`
+    SELECT strftime('%d', date) as day, SUM(amount) as total
+    FROM expenses
+    WHERE strftime('%Y-%m', date) = ? AND transaction_type != 'income'
+    GROUP BY day ORDER BY day
+  `).all(thisMonthStr) as DayRow[];
+  const dayMap: Record<string, number> = {};
+  for (const r of dayRows) dayMap[r.day] = r.total;
+  const dayData = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = String(i + 1).padStart(2, '0');
+    return { day: d, dayNum: i + 1, total: dayMap[d] ?? 0 };
+  });
+  const maxDay = Math.max(...dayData.map(d => d.total), 1);
   const dowMap: Record<number, number> = {};
   for (const r of dowRows) dowMap[r.dow] = r.total;
   const maxDow = Math.max(...Object.values(dowMap), 1);
@@ -83,7 +100,7 @@ export default function TrendsPage() {
     const row = db.prepare(`
       SELECT AVG(monthly) as avg FROM (
         SELECT SUM(amount) as monthly FROM expenses
-        WHERE date >= ? AND strftime('%Y-%m', date) != ?
+        WHERE date >= ? AND strftime('%Y-%m', date) != ? AND transaction_type != 'income'
         GROUP BY strftime('%Y-%m', date)
       )
     `).get(
@@ -158,6 +175,55 @@ export default function TrendsPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        {/* Day-by-day chart for current month */}
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="font-semibold">Daily Spend — This Month</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Each bar = one day · weekends in blue</p>
+            </div>
+            <p className="text-sm font-mono font-semibold text-gray-600 dark:text-gray-400">
+              {currency} {(dayData.reduce((s, d) => s + d.total, 0)).toLocaleString('en-IN', { minimumFractionDigits: 0 })} total
+            </p>
+          </div>
+          <div className="flex items-end gap-0.5 h-28 overflow-x-auto">
+            {dayData.map(({ day, dayNum, total }) => {
+              const pct = Math.round((total / maxDay) * 100);
+              const date = new Date(now.getFullYear(), now.getMonth(), dayNum);
+              const dow = date.getDay();
+              const isWeekend = dow === 0 || dow === 6;
+              const isToday = dayNum === now.getDate();
+              const isFuture = dayNum > now.getDate();
+              return (
+                <div key={day} className="flex-1 min-w-[8px] flex flex-col items-center gap-0.5" title={`Day ${dayNum}: ${currency} ${total.toLocaleString('en-IN')}`}>
+                  <div
+                    className="w-full flex items-end overflow-hidden rounded-t"
+                    style={{ height: '80px' }}
+                  >
+                    <div
+                      className={`w-full rounded-t transition-all ${
+                        isFuture ? 'bg-gray-100 dark:bg-gray-800' :
+                        isToday ? 'bg-emerald-500' :
+                        isWeekend ? 'bg-blue-300 dark:bg-blue-700' :
+                        'bg-emerald-200 dark:bg-emerald-800'
+                      }`}
+                      style={{ height: isFuture ? '2px' : `${Math.max(pct, total > 0 ? 4 : 0)}%` }}
+                    />
+                  </div>
+                  {(dayNum % 5 === 0 || dayNum === 1) && (
+                    <span className={`text-[9px] ${isToday ? 'text-emerald-600 font-bold' : 'text-gray-400'}`}>{dayNum}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-4 mt-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-300 inline-block" /> Weekday</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-300 dark:bg-blue-700 inline-block" /> Weekend</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500 inline-block" /> Today</span>
           </div>
         </div>
 
