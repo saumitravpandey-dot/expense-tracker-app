@@ -62,6 +62,7 @@ export default function Nav() {
         </div>
 
         <div className="ml-auto flex items-center gap-2 shrink-0">
+          <span className="hidden md:inline text-xs text-gray-400 cursor-default" title="Press ? for keyboard shortcuts">?</span>
           <ThemeToggle />
           {/* Hamburger for mobile */}
           <button

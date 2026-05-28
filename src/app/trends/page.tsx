@@ -116,6 +116,25 @@ export default function TrendsPage() {
   const thisMonthTotal = monthMap[thisMonthStr] ?? 0;
   const anomalyPct = threeMonthAvg > 0 ? Math.round(((thisMonthTotal - threeMonthAvg) / threeMonthAvg) * 100) : null;
 
+  // ── Annual totals (this year vs last year) ──
+  const thisYear = now.getFullYear().toString();
+  const lastYear = (now.getFullYear() - 1).toString();
+  interface YearRow { year: string; expenses: number; income: number; }
+  const yearRows = db.prepare(`
+    SELECT
+      strftime('%Y', date) as year,
+      COALESCE(SUM(CASE WHEN transaction_type != 'income' THEN amount ELSE 0 END), 0) as expenses,
+      COALESCE(SUM(CASE WHEN transaction_type = 'income' THEN amount ELSE 0 END), 0) as income
+    FROM expenses
+    WHERE strftime('%Y', date) IN (?, ?)
+    GROUP BY year
+  `).all(thisYear, lastYear) as YearRow[];
+  const thisYearData = yearRows.find(r => r.year === thisYear) ?? { expenses: 0, income: 0 };
+  const lastYearData = yearRows.find(r => r.year === lastYear) ?? { expenses: 0, income: 0 };
+  const yoyChange = lastYearData.expenses > 0
+    ? Math.round(((thisYearData.expenses - lastYearData.expenses) / lastYearData.expenses) * 100)
+    : null;
+
   // ── Savings rate per month (last 6 months) ──
   const savingsRows = db.prepare(`
     SELECT
@@ -216,6 +235,50 @@ export default function TrendsPage() {
             })}
           </div>
         </div>
+
+        {/* Year-over-year comparison */}
+        {(thisYearData.expenses > 0 || lastYearData.expenses > 0) && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="font-semibold">Year-over-Year</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{lastYear} vs {thisYear}</p>
+              </div>
+              {yoyChange !== null && (
+                <span className={`text-sm font-semibold px-3 py-1 rounded-full ${yoyChange > 0 ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'}`}>
+                  {yoyChange > 0 ? '↑' : '↓'}{Math.abs(yoyChange)}% vs {lastYear}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              {[{ label: thisYear, data: thisYearData }, { label: lastYear, data: lastYearData }].map(({ label, data }) => (
+                <div key={label} className="space-y-3">
+                  <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">{label}</p>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-500">Expenses</span>
+                      <span className="font-mono text-red-500">{currency} {Math.round(data.expenses).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-red-400 rounded-full" style={{ width: `${data.expenses > 0 ? Math.min(100, Math.round((data.expenses / Math.max(thisYearData.expenses, lastYearData.expenses)) * 100)) : 0}%` }} />
+                    </div>
+                  </div>
+                  {data.income > 0 && (
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-500">Income</span>
+                        <span className="font-mono text-emerald-500">{currency} {Math.round(data.income).toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${data.income > 0 ? Math.min(100, Math.round((data.income / Math.max(thisYearData.income, lastYearData.income, 1)) * 100)) : 0}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Savings rate chart (only shown if income is tracked) */}
         {hasSavingsData && (

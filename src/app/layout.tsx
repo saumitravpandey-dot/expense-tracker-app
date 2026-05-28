@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import KeyboardNav from "@/components/KeyboardNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+        <KeyboardNav />
         {children}
         {/* Mobile floating add button */}
         <Link
