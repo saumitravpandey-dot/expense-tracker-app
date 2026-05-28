@@ -2,21 +2,23 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { CATEGORIES } from '@/lib/types';
-import type { ParsedExpense } from '@/lib/types';
+import { CATEGORIES, TRANSACTION_TYPES, TRANSACTION_TYPE_CONFIG } from '@/lib/types';
+import type { ParsedExpense, TransactionType } from '@/lib/types';
+
+interface MerchantHint { name: string; category: string; txType: string; }
 
 interface Props {
   prefill?: Partial<ParsedExpense>;
   source?: 'manual' | 'ocr' | 'email' | 'text';
   onCancel?: () => void;
-  defaultType?: 'expense' | 'income';
+  defaultType?: TransactionType;
 }
 
 export default function ExpenseForm({ prefill, source = 'manual', onCancel, defaultType = 'expense' }: Props) {
   const router = useRouter();
   const today = new Date().toISOString().split('T')[0];
 
-  const [txType, setTxType] = useState<'expense' | 'income'>(defaultType);
+  const [txType, setTxType] = useState<TransactionType>(defaultType);
   const [amount, setAmount] = useState(prefill?.amount?.toString() ?? '');
   const [currency, setCurrency] = useState(prefill?.currency || 'INR');
   const [merchant, setMerchant] = useState(prefill?.merchant ?? '');
@@ -26,15 +28,14 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Merchant autocomplete
-  const [merchants, setMerchants] = useState<string[]>([]);
+  const [merchantHints, setMerchantHints] = useState<MerchantHint[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const merchantRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/api/expenses?merchants=1')
       .then(r => r.json())
-      .then(setMerchants)
+      .then(setMerchantHints)
       .catch(() => {});
   }, []);
 
@@ -49,8 +50,17 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
   }, []);
 
   const suggestions = merchant.trim().length >= 1
-    ? merchants.filter(m => m.toLowerCase().includes(merchant.toLowerCase()) && m.toLowerCase() !== merchant.toLowerCase()).slice(0, 6)
+    ? merchantHints.filter(h => h.name.toLowerCase().includes(merchant.toLowerCase()) && h.name.toLowerCase() !== merchant.toLowerCase()).slice(0, 6)
     : [];
+
+  function selectMerchant(hint: MerchantHint) {
+    setMerchant(hint.name);
+    if (hint.category) setCategory(hint.category);
+    if (hint.txType && (TRANSACTION_TYPES as readonly string[]).includes(hint.txType)) {
+      setTxType(hint.txType as TransactionType);
+    }
+    setShowSuggestions(false);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,20 +84,34 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
     }
   }
 
+  const cfg = TRANSACTION_TYPE_CONFIG[txType];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <p className="text-sm text-red-600 bg-red-50 dark:bg-red-950 px-3 py-2 rounded-lg">{error}</p>}
 
-      {/* Expense / Income toggle */}
-      <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
-        <button type="button" onClick={() => setTxType('expense')}
-          className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${txType === 'expense' ? 'bg-white dark:bg-gray-900 shadow text-gray-900 dark:text-gray-100' : 'text-gray-500'}`}>
-          Expense
-        </button>
-        <button type="button" onClick={() => setTxType('income')}
-          className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${txType === 'income' ? 'bg-white dark:bg-gray-900 shadow text-emerald-700 dark:text-emerald-400' : 'text-gray-500'}`}>
-          Income
-        </button>
+      {/* Transaction type selector */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Transaction Type</label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {TRANSACTION_TYPES.map(t => {
+            const c = TRANSACTION_TYPE_CONFIG[t];
+            const active = txType === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTxType(t)}
+                className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition-colors text-left ${active ? 'text-white border-transparent' : 'border-gray-200 dark:border-gray-700 hover:opacity-80 bg-gray-50 dark:bg-gray-800'}`}
+                style={active ? { backgroundColor: c.color, borderColor: c.color } : {}}
+                title={c.description}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-400 mt-1">{cfg.description}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -118,7 +142,7 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
         </div>
       </div>
 
-      {/* Merchant with autocomplete */}
+      {/* Merchant with autocomplete + category/type hint */}
       <div ref={merchantRef} className="relative">
         <label className="block text-sm font-medium mb-1">Merchant / Vendor</label>
         <input
@@ -132,14 +156,15 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
         />
         {showSuggestions && suggestions.length > 0 && (
           <ul className="absolute z-20 left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
-            {suggestions.map(s => (
-              <li key={s}>
+            {suggestions.map(h => (
+              <li key={h.name}>
                 <button
                   type="button"
-                  onMouseDown={e => { e.preventDefault(); setMerchant(s); setShowSuggestions(false); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 truncate"
+                  onMouseDown={e => { e.preventDefault(); selectMerchant(h); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between gap-2"
                 >
-                  {s}
+                  <span className="truncate font-medium">{h.name}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{h.category}</span>
                 </button>
               </li>
             ))}
@@ -185,9 +210,10 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
         <button
           type="submit"
           disabled={saving}
-          className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors"
+          className="flex-1 text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+          style={{ backgroundColor: cfg.color }}
         >
-          {saving ? 'Saving…' : txType === 'income' ? 'Save Income' : 'Save Expense'}
+          {saving ? 'Saving…' : `Save ${cfg.label}`}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="px-5 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">

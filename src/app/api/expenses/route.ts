@@ -9,10 +9,18 @@ export async function GET(req: NextRequest) {
 
   // Merchants autocomplete
   if (searchParams.get('merchants') === '1') {
-    const rows = db.prepare(
-      `SELECT merchant, COUNT(*) as c FROM expenses WHERE merchant != '' GROUP BY LOWER(merchant) ORDER BY c DESC LIMIT 80`
-    ).all() as { merchant: string; c: number }[];
-    return NextResponse.json(rows.map(r => r.merchant));
+    const rows = db.prepare(`
+      SELECT
+        merchant,
+        COUNT(*) as c,
+        (SELECT category FROM expenses e2 WHERE LOWER(e2.merchant) = LOWER(e1.merchant) GROUP BY category ORDER BY COUNT(*) DESC LIMIT 1) as top_category,
+        (SELECT transaction_type FROM expenses e2 WHERE LOWER(e2.merchant) = LOWER(e1.merchant) GROUP BY transaction_type ORDER BY COUNT(*) DESC LIMIT 1) as top_type
+      FROM expenses e1
+      WHERE merchant != ''
+      GROUP BY LOWER(merchant)
+      ORDER BY c DESC LIMIT 80
+    `).all() as { merchant: string; c: number; top_category: string; top_type: string }[];
+    return NextResponse.json(rows.map(r => ({ name: r.merchant, category: r.top_category, txType: r.top_type })));
   }
 
   const category = searchParams.get('category');
