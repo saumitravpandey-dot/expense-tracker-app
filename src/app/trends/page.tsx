@@ -11,6 +11,7 @@ interface DowRow { dow: number; total: number; }
 interface CategoryRow { category: string; total: number; }
 interface DayRow { day: string; total: number; }
 interface SubscriptionRow { merchant: string; avg_amount: number; months_count: number; last_date: string; category: string; currency: string; }
+interface SavingsRow { month: string; income: number; expenses: number; }
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -115,6 +116,23 @@ export default function TrendsPage() {
   const thisMonthTotal = monthMap[thisMonthStr] ?? 0;
   const anomalyPct = threeMonthAvg > 0 ? Math.round(((thisMonthTotal - threeMonthAvg) / threeMonthAvg) * 100) : null;
 
+  // ── Savings rate per month (last 6 months) ──
+  const savingsRows = db.prepare(`
+    SELECT
+      strftime('%Y-%m', date) as month,
+      COALESCE(SUM(CASE WHEN transaction_type = 'income' THEN amount ELSE 0 END), 0) as income,
+      COALESCE(SUM(CASE WHEN transaction_type != 'income' THEN amount ELSE 0 END), 0) as expenses
+    FROM expenses
+    WHERE date >= ?
+    GROUP BY month
+    ORDER BY month
+  `).all(`${months[0]}-01`) as SavingsRow[];
+  const savingsData = months.map(m => {
+    const r = savingsRows.find(s => s.month === m);
+    return { month: m, income: r?.income ?? 0, expenses: r?.expenses ?? 0 };
+  });
+  const hasSavingsData = savingsData.some(d => d.income > 0);
+
   // ── Recurring subscriptions (consistent monthly charges) ──
   const subscriptions = db.prepare(`
     SELECT
@@ -198,6 +216,39 @@ export default function TrendsPage() {
             })}
           </div>
         </div>
+
+        {/* Savings rate chart (only shown if income is tracked) */}
+        {hasSavingsData && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
+            <h2 className="font-semibold mb-1">Savings Rate — Last 6 Months</h2>
+            <p className="text-xs text-gray-400 mb-6">Green = savings, red = overspent vs income</p>
+            <div className="flex items-end gap-3 h-28">
+              {savingsData.map(d => {
+                const savings = d.income - d.expenses;
+                const rate = d.income > 0 ? Math.round((savings / d.income) * 100) : null;
+                const isCurrent = d.month === thisMonthStr;
+                const isPositive = savings >= 0;
+                const barPct = d.income > 0 ? Math.min(Math.abs(rate ?? 0), 100) : 0;
+                return (
+                  <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
+                    <span className={`text-xs font-medium ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                      {rate !== null ? `${isPositive ? '+' : ''}${rate}%` : '—'}
+                    </span>
+                    <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-t-lg overflow-hidden flex items-end" style={{ height: '64px' }}>
+                      <div
+                        className={`w-full rounded-t-lg transition-all ${isCurrent ? (isPositive ? 'bg-emerald-500' : 'bg-red-500') : (isPositive ? 'bg-emerald-200 dark:bg-emerald-800' : 'bg-red-200 dark:bg-red-800')}`}
+                        style={{ height: `${Math.max(barPct, d.income > 0 ? 4 : 0)}%` }}
+                      />
+                    </div>
+                    <span className={`text-xs ${isCurrent ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-gray-400'}`}>
+                      {monthLabel(d.month)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Day-by-day chart for current month */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
