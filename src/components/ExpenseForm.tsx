@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { CATEGORIES } from '@/lib/types';
 import type { ParsedExpense } from '@/lib/types';
@@ -25,6 +25,32 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
   const [description, setDescription] = useState(prefill?.description ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Merchant autocomplete
+  const [merchants, setMerchants] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const merchantRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch('/api/expenses?merchants=1')
+      .then(r => r.json())
+      .then(setMerchants)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (merchantRef.current && !merchantRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const suggestions = merchant.trim().length >= 1
+    ? merchants.filter(m => m.toLowerCase().includes(merchant.toLowerCase()) && m.toLowerCase() !== merchant.toLowerCase()).slice(0, 6)
+    : [];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,15 +118,33 @@ export default function ExpenseForm({ prefill, source = 'manual', onCancel, defa
         </div>
       </div>
 
-      <div>
+      {/* Merchant with autocomplete */}
+      <div ref={merchantRef} className="relative">
         <label className="block text-sm font-medium mb-1">Merchant / Vendor</label>
         <input
           type="text"
           value={merchant}
-          onChange={e => setMerchant(e.target.value)}
+          onChange={e => { setMerchant(e.target.value); setShowSuggestions(true); }}
+          onFocus={() => setShowSuggestions(true)}
           placeholder="e.g. Swiggy, Amazon, Uber"
           className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          autoComplete="off"
         />
+        {showSuggestions && suggestions.length > 0 && (
+          <ul className="absolute z-20 left-0 right-0 mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
+            {suggestions.map(s => (
+              <li key={s}>
+                <button
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); setMerchant(s); setShowSuggestions(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 truncate"
+                >
+                  {s}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
