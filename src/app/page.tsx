@@ -8,6 +8,24 @@ import type { Expense } from '@/lib/types';
 interface CategoryTotal { category: string; total: number; }
 
 function Dashboard() {
+  try {
+    return <DashboardInner />;
+  } catch {
+    return (
+      <>
+        <Nav />
+        <main className="max-w-5xl mx-auto px-4 py-16 text-center">
+          <p className="text-gray-400 mb-4">Could not load dashboard data.</p>
+          <Link href="/add" className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            + Add your first expense
+          </Link>
+        </main>
+      </>
+    );
+  }
+}
+
+function DashboardInner() {
   const db = getDb();
 
   const now = new Date();

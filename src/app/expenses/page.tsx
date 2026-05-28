@@ -6,6 +6,32 @@ import CategoryBadge from '@/components/CategoryBadge';
 import { CATEGORIES } from '@/lib/types';
 import type { Expense } from '@/lib/types';
 
+interface EditState {
+  id: number;
+  amount: string;
+  currency: string;
+  merchant: string;
+  category: string;
+  date: string;
+  description: string;
+}
+
+function thisMonth() {
+  const now = new Date();
+  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const to = now.toISOString().split('T')[0];
+  return { from, to };
+}
+
+function lastMonth() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  const last = new Date(now.getFullYear(), now.getMonth(), 0);
+  const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+  return { from, to };
+}
+
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,6 +39,8 @@ export default function ExpensesPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
@@ -27,12 +55,54 @@ export default function ExpensesPage() {
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
+  function startEdit(e: Expense) {
+    setEditing({
+      id: e.id,
+      amount: String(e.amount),
+      currency: e.currency,
+      merchant: e.merchant,
+      category: e.category,
+      date: e.date,
+      description: e.description,
+    });
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setSaving(true);
+    const res = await fetch(`/api/expenses/${editing.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: parseFloat(editing.amount),
+        currency: editing.currency,
+        merchant: editing.merchant,
+        category: editing.category,
+        date: editing.date,
+        description: editing.description,
+      }),
+    });
+    if (res.ok) {
+      const updated: Expense = await res.json();
+      setExpenses(prev => prev.map(e => e.id === updated.id ? updated : e));
+      setEditing(null);
+    }
+    setSaving(false);
+  }
+
   async function handleDelete(id: number) {
     if (!confirm('Delete this expense?')) return;
     setDeleting(id);
     await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
     setExpenses(prev => prev.filter(e => e.id !== id));
     setDeleting(null);
+  }
+
+  function applyThisMonth() {
+    const r = thisMonth(); setFrom(r.from); setTo(r.to);
+  }
+  function applyLastMonth() {
+    const r = lastMonth(); setFrom(r.from); setTo(r.to);
   }
 
   function exportCsv() {
@@ -57,44 +127,49 @@ export default function ExpensesPage() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">All Expenses</h1>
-          <button
-            onClick={exportCsv}
-            className="text-sm px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
+          <button onClick={exportCsv} className="text-sm px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
             Export CSV
           </button>
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Category</label>
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900"
-            >
-              <option>All</option>
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 mb-6 space-y-3">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Category</label>
+              <select value={category} onChange={e => setCategory(e.target.value)}
+                className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900">
+                <option>All</option>
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">From</label>
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">To</label>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
+            </div>
+            <button onClick={fetchExpenses} className="px-4 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">Filter</button>
+            <button onClick={() => { setCategory('All'); setFrom(''); setTo(''); }}
+              className="px-4 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">From</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
+
+          {/* Quick date filters */}
+          <div className="flex gap-2 pt-1">
+            <span className="text-xs text-gray-400 self-center">Quick:</span>
+            <button onClick={applyThisMonth}
+              className="text-xs px-3 py-1 rounded-full border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950">
+              This Month
+            </button>
+            <button onClick={applyLastMonth}
+              className="text-xs px-3 py-1 rounded-full border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
+              Last Month
+            </button>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">To</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)}
-              className="border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900" />
-          </div>
-          <button onClick={fetchExpenses} className="px-4 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">
-            Filter
-          </button>
-          <button onClick={() => { setCategory('All'); setFrom(''); setTo(''); }}
-            className="px-4 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-            Clear
-          </button>
         </div>
 
         {/* Summary */}
@@ -127,29 +202,69 @@ export default function ExpensesPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {expenses.map(e => (
-                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-4 py-3 text-gray-500">{e.date}</td>
-                    <td className="px-4 py-3 font-medium">
-                      {e.merchant || <span className="text-gray-400 italic">—</span>}
-                      {e.description && <p className="text-xs text-gray-400 font-normal">{e.description}</p>}
-                    </td>
-                    <td className="px-4 py-3"><CategoryBadge category={e.category} /></td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold">
-                      {e.currency} {e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-gray-400 capitalize">{e.source}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleDelete(e.id)}
-                        disabled={deleting === e.id}
-                        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40"
-                      >
-                        {deleting === e.id ? '…' : 'Delete'}
-                      </button>
-                    </td>
-                  </tr>
+                  editing?.id === e.id ? (
+                    /* ── Inline edit row ── */
+                    <tr key={e.id} className="bg-emerald-50 dark:bg-emerald-950/30">
+                      <td className="px-2 py-2">
+                        <input type="date" value={editing.date} onChange={ev => setEditing(s => s && ({ ...s, date: ev.target.value }))}
+                          className="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900" />
+                      </td>
+                      <td className="px-2 py-2" colSpan={1}>
+                        <input type="text" value={editing.merchant} placeholder="Merchant"
+                          onChange={ev => setEditing(s => s && ({ ...s, merchant: ev.target.value }))}
+                          className="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900" />
+                        <input type="text" value={editing.description} placeholder="Description"
+                          onChange={ev => setEditing(s => s && ({ ...s, description: ev.target.value }))}
+                          className="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900 mt-1" />
+                      </td>
+                      <td className="px-2 py-2">
+                        <select value={editing.category} onChange={ev => setEditing(s => s && ({ ...s, category: ev.target.value }))}
+                          className="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900">
+                          {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <div className="flex gap-1 justify-end">
+                          <select value={editing.currency} onChange={ev => setEditing(s => s && ({ ...s, currency: ev.target.value }))}
+                            className="border border-gray-300 dark:border-gray-700 rounded px-1 py-1 text-xs bg-white dark:bg-gray-900 w-16">
+                            {['INR','USD','EUR','GBP','SGD','AED'].map(c => <option key={c}>{c}</option>)}
+                          </select>
+                          <input type="number" value={editing.amount} step="0.01"
+                            onChange={ev => setEditing(s => s && ({ ...s, amount: ev.target.value }))}
+                            className="border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900 w-24 text-right" />
+                        </div>
+                      </td>
+                      <td className="px-2 py-2 text-xs text-gray-400 capitalize">{e.source}</td>
+                      <td className="px-2 py-2 text-right space-x-2">
+                        <button onClick={saveEdit} disabled={saving}
+                          className="text-xs bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700 disabled:opacity-50">
+                          {saving ? '…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditing(null)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                      </td>
+                    </tr>
+                  ) : (
+                    /* ── Normal row ── */
+                    <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="px-4 py-3 text-gray-500">{e.date}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {e.merchant || <span className="text-gray-400 italic">—</span>}
+                        {e.description && <p className="text-xs text-gray-400 font-normal">{e.description}</p>}
+                      </td>
+                      <td className="px-4 py-3"><CategoryBadge category={e.category} /></td>
+                      <td className="px-4 py-3 text-right font-mono font-semibold">
+                        {e.currency} {e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3"><span className="text-xs text-gray-400 capitalize">{e.source}</span></td>
+                      <td className="px-4 py-3 text-right space-x-3">
+                        <button onClick={() => startEdit(e)} className="text-xs text-blue-500 hover:text-blue-700">Edit</button>
+                        <button onClick={() => handleDelete(e.id)} disabled={deleting === e.id}
+                          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40">
+                          {deleting === e.id ? '…' : 'Delete'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
                 ))}
               </tbody>
             </table>
