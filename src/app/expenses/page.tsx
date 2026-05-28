@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
 import { CATEGORIES } from '@/lib/types';
@@ -33,15 +34,26 @@ function lastMonth() {
 }
 
 export default function ExpensesPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-20 text-gray-400">Loading…</div>}>
+      <ExpensesPageInner />
+    </Suspense>
+  );
+}
+
+function ExpensesPageInner() {
+  const sp = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('All');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(sp.get('from') ?? '');
+  const [to, setTo] = useState(sp.get('to') ?? '');
   const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState<number | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounce search input
@@ -54,6 +66,7 @@ export default function ExpensesPage() {
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
+    setSelected(new Set());
     const params = new URLSearchParams();
     if (category !== 'All') params.set('category', category);
     if (from) params.set('from', from);
@@ -106,7 +119,34 @@ export default function ExpensesPage() {
     setDeleting(id);
     await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
     setExpenses(prev => prev.filter(e => e.id !== id));
+    setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
     setDeleting(null);
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    if (!confirm(`Delete ${selected.size} selected expense${selected.size !== 1 ? 's' : ''}?`)) return;
+    setBulkDeleting(true);
+    await Promise.all([...selected].map(id => fetch(`/api/expenses/${id}`, { method: 'DELETE' })));
+    setExpenses(prev => prev.filter(e => !selected.has(e.id)));
+    setSelected(new Set());
+    setBulkDeleting(false);
+  }
+
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === expenses.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(expenses.map(e => e.id)));
+    }
   }
 
   function applyThisMonth() {
@@ -136,11 +176,22 @@ export default function ExpensesPage() {
     <>
       <Nav />
       <main className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold">All Expenses</h1>
-          <button onClick={exportCsv} className="text-sm px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
-            Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            {selected.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="text-sm px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg"
+              >
+                {bulkDeleting ? 'Deleting…' : `Delete ${selected.size} selected`}
+              </button>
+            )}
+            <button onClick={exportCsv} className="text-sm px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+              Export CSV
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -217,6 +268,14 @@ export default function ExpensesPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 text-xs uppercase">
                 <tr>
+                  <th className="px-3 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={expenses.length > 0 && selected.size === expenses.length}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left">Date</th>
                   <th className="px-4 py-3 text-left">Merchant</th>
                   <th className="px-4 py-3 text-left">Category</th>
@@ -230,6 +289,9 @@ export default function ExpensesPage() {
                   editing?.id === e.id ? (
                     /* ── Inline edit row ── */
                     <tr key={e.id} className="bg-emerald-50 dark:bg-emerald-950/30">
+                      <td className="px-3 py-2 text-center">
+                        <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} className="rounded" />
+                      </td>
                       <td className="px-2 py-2">
                         <input type="date" value={editing.date} onChange={ev => setEditing(s => s && ({ ...s, date: ev.target.value }))}
                           className="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-xs bg-white dark:bg-gray-900" />
@@ -270,7 +332,10 @@ export default function ExpensesPage() {
                     </tr>
                   ) : (
                     /* ── Normal row ── */
-                    <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={e.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${selected.has(e.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                      <td className="px-3 py-3 text-center">
+                        <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} className="rounded" />
+                      </td>
                       <td className="px-4 py-3 text-gray-500">{e.date}</td>
                       <td className="px-4 py-3 font-medium">
                         {e.merchant || <span className="text-gray-400 italic">—</span>}

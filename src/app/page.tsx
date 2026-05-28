@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
+import MonthNav from '@/components/MonthNav';
 import { getDb } from '@/lib/db';
 import { CATEGORY_COLORS } from '@/lib/types';
 import type { Expense } from '@/lib/types';
@@ -8,9 +9,31 @@ import type { Expense } from '@/lib/types';
 interface CategoryTotal { category: string; total: number; }
 interface Budget { category: string; amount: number; currency: string; }
 
-function Dashboard() {
+function parseMonth(raw: string | undefined): string {
+  const now = new Date();
+  const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  if (!raw || !/^\d{4}-\d{2}$/.test(raw)) return current;
+  return raw;
+}
+
+function monthRange(ym: string): { start: string; end: string } {
+  const [y, m] = ym.split('-').map(Number);
+  const start = `${ym}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const end = `${ym}-${String(lastDay).padStart(2, '0')}`;
+  return { start, end };
+}
+
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const sp = await searchParams;
+  const month = parseMonth(sp.month);
+
   try {
-    return <DashboardInner />;
+    return <DashboardInner month={month} />;
   } catch {
     return (
       <>
@@ -26,12 +49,9 @@ function Dashboard() {
   }
 }
 
-function DashboardInner() {
+function DashboardInner({ month }: { month: string }) {
   const db = getDb();
-
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const monthEnd = now.toISOString().split('T')[0];
+  const { start: monthStart, end: monthEnd } = monthRange(month);
 
   const monthExpenses = (db.prepare(
     `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ? AND transaction_type != 'income'`
@@ -54,8 +74,8 @@ function DashboardInner() {
   const overBudgetCount = byCategory.filter(c => budgetMap[c.category] && c.total > budgetMap[c.category]).length;
 
   const recent = db.prepare(
-    `SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT 8`
-  ).all() as Expense[];
+    `SELECT * FROM expenses WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC LIMIT 8`
+  ).all(monthStart, monthEnd) as Expense[];
 
   const allTimeTotal = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE transaction_type != 'income'`).get() as { total: number }).total;
   const count = (db.prepare(`SELECT COUNT(*) as c FROM expenses WHERE transaction_type != 'income'`).get() as { c: number }).c;
@@ -67,11 +87,17 @@ function DashboardInner() {
       <Nav />
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
 
+        {/* Month picker header */}
+        <div className="flex items-center justify-between">
+          <MonthNav month={month} />
+          <p className="text-xs text-gray-400">{count} total expense{count !== 1 ? 's' : ''} · {currency} {allTimeTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })} all time</p>
+        </div>
+
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4">
-          <StatCard label="Spent This Month" value={`${currency} ${monthExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sub={new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard label="Spent" value={`${currency} ${monthExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sub="expenses this month" />
           <StatCard
-            label="Income This Month"
+            label="Income"
             value={monthIncome > 0 ? `${currency} ${monthIncome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
             sub={monthIncome > 0 ? 'credited' : 'Add income →'}
             href={monthIncome === 0 ? '/add' : undefined}
@@ -79,7 +105,7 @@ function DashboardInner() {
           <StatCard
             label="Net Savings"
             value={monthIncome > 0 ? `${currency} ${(monthIncome - monthExpenses).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-            sub={monthIncome > 0 ? `${Math.round(((monthIncome - monthExpenses) / monthIncome) * 100)}% saved` : 'Track income to see'}
+            sub={monthIncome > 0 ? `${Math.max(0, Math.round(((monthIncome - monthExpenses) / monthIncome) * 100))}% saved` : 'Track income to see'}
             alert={monthIncome > 0 && monthIncome < monthExpenses}
           />
           <StatCard
@@ -95,11 +121,11 @@ function DashboardInner() {
           {/* Category breakdown with budget bars */}
           <div className="col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">This Month</h2>
+              <h2 className="font-semibold">By Category</h2>
               <Link href="/budgets" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline">Budgets →</Link>
             </div>
             {byCategory.length === 0 ? (
-              <p className="text-sm text-gray-400 py-8 text-center">No data yet</p>
+              <p className="text-sm text-gray-400 py-8 text-center">No data for this month</p>
             ) : (
               <div className="space-y-3">
                 {byCategory.map(c => {
@@ -133,17 +159,17 @@ function DashboardInner() {
             )}
           </div>
 
-          {/* Recent expenses */}
+          {/* Recent expenses for selected month */}
           <div className="col-span-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">Recent Expenses</h2>
-              <Link href="/expenses" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline">View all →</Link>
+              <h2 className="font-semibold">Transactions</h2>
+              <Link href={`/expenses?from=${monthStart}&to=${monthEnd}`} className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline">View all →</Link>
             </div>
             {recent.length === 0 ? (
               <div className="py-12 text-center">
-                <p className="text-gray-400 text-sm mb-4">No expenses yet.</p>
+                <p className="text-gray-400 text-sm mb-4">No transactions this month.</p>
                 <Link href="/add" className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg">
-                  + Add your first expense
+                  + Add expense
                 </Link>
               </div>
             ) : (
@@ -155,8 +181,8 @@ function DashboardInner() {
                       <p className="text-xs text-gray-400">{e.date}</p>
                     </div>
                     <CategoryBadge category={e.category} />
-                    <span className="font-mono text-sm font-semibold shrink-0">
-                      {e.currency} {e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <span className={`font-mono text-sm font-semibold shrink-0 ${(e as Expense & { transaction_type?: string }).transaction_type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+                      {(e as Expense & { transaction_type?: string }).transaction_type === 'income' ? '+' : ''}{e.currency} {e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 ))}
@@ -173,8 +199,8 @@ function DashboardInner() {
           <Link href="/import" className="inline-flex items-center gap-2 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium px-6 py-3 rounded-xl transition-colors">
             ⬆ Import Statement
           </Link>
-          <Link href="/expenses" className="inline-flex items-center gap-2 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium px-6 py-3 rounded-xl transition-colors">
-            View All
+          <Link href="/trends" className="inline-flex items-center gap-2 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 font-medium px-6 py-3 rounded-xl transition-colors">
+            📊 Trends
           </Link>
         </div>
 
@@ -199,5 +225,3 @@ function StatCard({
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
 }
-
-export default Dashboard;
