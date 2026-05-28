@@ -21,6 +21,12 @@ export function getDb(): Database.Database {
       source      TEXT    NOT NULL DEFAULT 'manual',
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS budgets (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT    UNIQUE NOT NULL,
+      amount   REAL    NOT NULL,
+      currency TEXT    NOT NULL DEFAULT 'INR'
+    );
   `);
   return _db;
 }
