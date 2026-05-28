@@ -45,6 +45,8 @@ function ExpensesPageInner() {
   const sp = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [category, setCategory] = useState('All');
   const [from, setFrom] = useState(sp.get('from') ?? '');
   const [to, setTo] = useState(sp.get('to') ?? '');
@@ -55,6 +57,7 @@ function ExpensesPageInner() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const PAGE_SIZE = 50;
 
   // Debounce search input
   useEffect(() => {
@@ -64,18 +67,35 @@ function ExpensesPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const fetchExpenses = useCallback(async () => {
-    setLoading(true);
-    setSelected(new Set());
+  function buildParams(offset = 0) {
     const params = new URLSearchParams();
     if (category !== 'All') params.set('category', category);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (search.trim()) params.set('search', search.trim());
-    const res = await fetch(`/api/expenses?${params}`);
-    setExpenses(await res.json());
+    params.set('limit', String(PAGE_SIZE));
+    params.set('offset', String(offset));
+    return params;
+  }
+
+  const fetchExpenses = useCallback(async () => {
+    setLoading(true);
+    setSelected(new Set());
+    const res = await fetch(`/api/expenses?${buildParams(0)}`);
+    const data = await res.json();
+    setExpenses(data);
+    setTotalCount(parseInt(res.headers.get('X-Total-Count') ?? '0', 10));
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, from, to, search]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    const res = await fetch(`/api/expenses?${buildParams(expenses.length)}`);
+    const data = await res.json();
+    setExpenses(prev => [...prev, ...data]);
+    setLoadingMore(false);
+  }
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -251,7 +271,7 @@ function ExpensesPageInner() {
         {/* Summary */}
         {!loading && expenses.length > 0 && (
           <p className="text-sm text-gray-500 mb-3">
-            {expenses.length} expense{expenses.length !== 1 ? 's' : ''} · Total:{' '}
+            Showing {expenses.length}{totalCount > expenses.length ? ` of ${totalCount}` : ''} expense{totalCount !== 1 ? 's' : ''} · Total:{' '}
             <span className="font-semibold text-gray-900 dark:text-gray-100">
               {expenses[0]?.currency} {total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
@@ -358,6 +378,19 @@ function ExpensesPageInner() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Load more */}
+        {!loading && expenses.length > 0 && expenses.length < totalCount && (
+          <div className="text-center pt-4">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="px-6 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : `Load more (${totalCount - expenses.length} remaining)`}
+            </button>
           </div>
         )}
       </main>

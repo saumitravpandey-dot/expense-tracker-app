@@ -41,10 +41,22 @@ export async function GET(req: NextRequest) {
     params.push(term, term, term);
   }
 
-  query += ' ORDER BY date DESC, id DESC LIMIT 200';
+  const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10) || 50, 500);
+  const offset = parseInt(searchParams.get('offset') ?? '0', 10) || 0;
 
+  const baseQuery = query;
+  const baseParams = [...params];
+
+  // Count matching rows
+  const countQ = baseQuery.replace('SELECT *', 'SELECT COUNT(*) as cnt');
+  const { cnt: total } = db.prepare(countQ).get(...baseParams) as { cnt: number };
+
+  query += ` ORDER BY date DESC, id DESC LIMIT ${limit} OFFSET ${offset}`;
   const expenses = db.prepare(query).all(...params) as Expense[];
-  return NextResponse.json(expenses);
+
+  return NextResponse.json(expenses, {
+    headers: { 'X-Total-Count': String(total), 'X-Offset': String(offset), 'X-Limit': String(limit) },
+  });
 }
 
 export async function POST(req: NextRequest) {
