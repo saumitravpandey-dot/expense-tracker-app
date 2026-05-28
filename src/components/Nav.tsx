@@ -10,6 +10,7 @@ const links = [
   { href: '/budgets', label: 'Budgets' },
   { href: '/mappings', label: '⚙ Mappings' },
   { href: '/import', label: '⬆ Import' },
+  { href: '/settings', label: '◎ Settings' },
   { href: '/add', label: '+ Add' },
 ];
 
