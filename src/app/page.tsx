@@ -84,6 +84,22 @@ function DashboardInner({ month }: { month: string }) {
   const allTimeTotal = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE transaction_type != 'income'`).get() as { total: number }).total;
   const count = (db.prepare(`SELECT COUNT(*) as c FROM expenses WHERE transaction_type != 'income'`).get() as { c: number }).c;
 
+  // Top merchants for selected month
+  const topMerchants = db.prepare(`
+    SELECT merchant, SUM(amount) as total, COUNT(*) as cnt
+    FROM expenses
+    WHERE date >= ? AND date <= ? AND merchant != '' AND transaction_type != 'income'
+    GROUP BY merchant ORDER BY total DESC LIMIT 5
+  `).all(monthStart, monthEnd) as { merchant: string; total: number; cnt: number }[];
+
+  // Spending velocity (current month only)
+  const now = new Date();
+  const isCurrentMonth = month === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const daysElapsed = isCurrentMonth ? now.getDate() : new Date(Number(month.split('-')[0]), Number(month.split('-')[1]), 0).getDate();
+  const totalDays = new Date(Number(month.split('-')[0]), Number(month.split('-')[1]), 0).getDate();
+  const dailyAvg = daysElapsed > 0 ? monthExpenses / daysElapsed : 0;
+  const projectedMonthly = dailyAvg * totalDays;
+
   const maxCat = byCategory[0]?.total ?? 1;
 
   return (
@@ -198,6 +214,62 @@ function DashboardInner({ month }: { month: string }) {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Top merchants + spending velocity */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {topMerchants.length > 0 && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
+              <h2 className="font-semibold mb-4">Top Merchants</h2>
+              <div className="space-y-2.5">
+                {topMerchants.map((m, i) => (
+                  <div key={m.merchant} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 w-4 shrink-0 font-mono">{i + 1}</span>
+                    <span className="flex-1 text-sm font-medium truncate">{m.merchant}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{m.cnt}×</span>
+                    <span className="font-mono text-sm font-semibold shrink-0">
+                      {currency} {Math.round(m.total).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isCurrentMonth && daysElapsed > 0 && monthExpenses > 0 && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5">
+              <h2 className="font-semibold mb-4">Spending Velocity</h2>
+              <div className="space-y-4">
+                <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Daily average</p>
+                    <p className="text-2xl font-bold">{currency} {Math.round(dailyAvg).toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 mb-1">Day {daysElapsed} of {totalDays}</p>
+                    <p className="text-sm text-gray-400">{Math.round((daysElapsed / totalDays) * 100)}% of month</p>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Projected month-end</span>
+                    <span className={`font-semibold ${projectedMonthly > monthExpenses * 1.2 ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                      {currency} {Math.round(projectedMonthly).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{ width: `${Math.min(100, Math.round((daysElapsed / totalDays) * 100))}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {currency} {Math.round(monthExpenses).toLocaleString('en-IN')} spent in {daysElapsed} day{daysElapsed !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Quick actions */}
