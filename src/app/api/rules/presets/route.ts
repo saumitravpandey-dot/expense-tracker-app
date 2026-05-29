@@ -6,6 +6,63 @@ import { getDb } from '@/lib/db';
 type PresetRow = [string, string, string, string, string, string, number, string];
 
 const PRESETS: PresetRow[] = [
+  // ─── PRIORITY 99: CC REFUNDS / REVERSALS / PAYMENTS ON STATEMENT (exclude) ───
+  // These appear in CC statements as credits — should be skipped entirely
+  ['PAYMENT RECEIVED', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'CC payment received (credit on statement)'],
+  ['PAYMENT THANK YOU', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'CC payment acknowledgement'],
+  ['PAYMENT - THANK YOU', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'AmEx payment received'],
+  ['PAYMENT THRU NETBANKING', 'contains', 'description', 'cc_payment', '', 'exclude', 99, 'CC payment via net banking'],
+  ['REWARD POINT REDEMPTION', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'Reward points redeemed'],
+  ['REWARD REDEMPTION', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'Reward redemption credit'],
+  ['POINTS REDEMPTION', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'Points redemption'],
+  ['CASHBACK CREDIT', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'Cashback credited to CC'],
+  ['CASHBACK REVERSAL', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'Cashback reversal'],
+  ['REVERSAL OF', 'startsWith', 'description', 'transfer', '', 'exclude', 99, 'Transaction reversal (refund)'],
+  ['CREDIT NOTE', 'contains', 'description', 'transfer', '', 'exclude', 99, 'Credit note (refund)'],
+  ['REFUND FROM', 'startsWith', 'description', 'transfer', '', 'exclude', 99, 'Merchant refund'],
+  ['PAYBACK CASHBACK', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'ICICI PayBack cashback'],
+  ['EDGE REWARD', 'contains', 'both', 'cc_payment', '', 'exclude', 99, 'Axis Edge reward redemption'],
+  ['OPENING BALANCE', 'contains', 'description', 'transfer', '', 'exclude', 99, 'Statement opening balance line'],
+  ['CLOSING BALANCE', 'contains', 'description', 'transfer', '', 'exclude', 99, 'Statement closing balance line'],
+
+  // ─── PRIORITY 98: CC BANK FEES (include as bank_fee) ───
+  // CC-specific fee patterns — these are expenses on your CC statement
+  ['FINANCE CHARGES', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC finance/interest charges'],
+  ['INTEREST CHARGES', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC interest charged'],
+  ['INTEREST CHARGED', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC interest charged'],
+  ['LATE PAYMENT CHARGE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC late payment charge'],
+  ['LATE CHARGES', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC late payment charge (SBI format)'],
+  ['ANNUAL MEMBERSHIP FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC annual membership fee'],
+  ['ANNUAL FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC annual fee'],
+  ['RENEWAL FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC renewal fee'],
+  ['JOINING FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC joining fee'],
+  ['FOREX MARKUP', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Foreign exchange markup fee'],
+  ['FOREIGN TRANSACTION FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Foreign currency transaction fee'],
+  ['FCY TRANSACTION', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Foreign currency transaction fee'],
+  ['FOREIGN CURRENCY MARKUP', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Forex markup fee'],
+  ['FUEL SURCHARGE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Fuel surcharge on CC'],
+  ['OVER LIMIT FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CC over-limit fee'],
+  ['CASH ADVANCE FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Cash advance transaction fee'],
+  ['PROC FEE', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'Processing fee (HDFC)'],
+  ['GST ON CHARGES', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'GST applied on CC charges'],
+  ['CGST', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'CGST on bank charges'],
+  ['SGST', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'SGST on bank charges'],
+  ['IGST', 'contains', 'description', 'bank_fee', 'Bills & Utilities', 'include', 98, 'IGST on bank charges'],
+
+  // ─── PRIORITY 97: CC CASH ADVANCE ───
+  ['CASH ADVANCE', 'contains', 'description', 'cash', '', 'include', 97, 'Cash advance on credit card'],
+  ['ATM CASH ADVANCE', 'contains', 'description', 'cash', '', 'include', 97, 'ATM cash advance on CC'],
+  ['CASH@BANK', 'contains', 'description', 'cash', '', 'include', 97, 'ICICI cash advance at bank'],
+
+  // ─── PRIORITY 96: CC EMI PATTERNS ───
+  ['INSTAEMI', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'HDFC InstaEMI conversion'],
+  ['FLEXIPAY', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'HDFC FlexiPay EMI'],
+  ['EASY EMI', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'Easy EMI conversion'],
+  ['EMI CONV', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'EMI conversion on CC'],
+  ['EMI FOR', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'EMI for specific purchase'],
+  ['EASY LOANS', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'Easy Loans (Axis)'],
+  ['FLEXI LOAN', 'contains', 'description', 'loan_emi', 'Bills & Utilities', 'include', 96, 'FlexiLoan on CC'],
+
   // ─── PRIORITY 100: CC PAYMENTS ───
   ['CREDIT CARD', 'contains', 'description', 'cc_payment', '', 'exclude', 100, 'Credit card bill payment'],
   ['CC BILL', 'contains', 'description', 'cc_payment', '', 'exclude', 100, 'Credit card bill'],
@@ -177,6 +234,73 @@ const PRESETS: PresetRow[] = [
   ['RELIANCE SMART', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Reliance Smart'],
   ['SPENCER', 'contains', 'both', 'expense', 'Shopping', 'include', 50, "Spencer's retail"],
   ['MORE SUPERMARKET', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'More Supermarket'],
+
+  // ─── PRIORITY 50: ALTERNATE MERCHANT NAMES (CC statement format) ───
+  // These appear verbosely on CC statements — mapped to correct categories
+  // Transport
+  ['ANI TECHNOLOGIES', 'contains', 'both', 'expense', 'Transport', 'include', 50, 'Ola Cabs (legal name: ANI Technologies)'],
+  ['MERU CABS', 'contains', 'both', 'expense', 'Transport', 'include', 50, 'Meru cab service'],
+  ['MOVE IN SYNC', 'contains', 'both', 'expense', 'Transport', 'include', 50, 'Meru/Move in Sync'],
+  ['ORLA TECHNOLOGIES', 'contains', 'both', 'expense', 'Transport', 'include', 50, 'Ola Electric'],
+  // Food delivery
+  ['SWIGGY TECHNOLOGIES', 'contains', 'both', 'expense', 'Food & Dining', 'include', 50, 'Swiggy (legal name)'],
+  ['BUNDL TECHNOLOGIES', 'contains', 'both', 'expense', 'Food & Dining', 'include', 50, 'Swiggy (Bundl Technologies)'],
+  ['ZOMATO MEDIA', 'contains', 'both', 'expense', 'Food & Dining', 'include', 50, 'Zomato (legal: Zomato Media)'],
+  ['ETERNAL LTD', 'contains', 'both', 'expense', 'Food & Dining', 'include', 50, 'Zomato (Eternal Ltd)'],
+  ['BLINKIT', 'contains', 'both', 'expense', 'Food & Dining', 'include', 50, 'Blinkit groceries'],
+  // Shopping
+  ['AMAZON SELLER SERV', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Amazon marketplace'],
+  ['AMZN MKTP', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Amazon marketplace (short form)'],
+  ['AMZNPRIME', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Amazon Prime subscription'],
+  ['AMZN DIGITAL', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Amazon digital/Prime'],
+  ['FK RETAIL', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Flipkart Retail'],
+  ['FLIPKART INTERNET', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Flipkart'],
+  // Entertainment/Subscriptions
+  ['NETFLIX.COM', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Netflix (domain format on CC)'],
+  ['SPOTIFY.COM', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Spotify (domain format)'],
+  ['SPOTIFY INDIA', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Spotify India'],
+  ['GOOGLE *YOUTUBE', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'YouTube Premium'],
+  ['GOOGLE YOUTUBE', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'YouTube Premium'],
+  ['YOUTUBE PREMIUM', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'YouTube Premium'],
+  ['GOOGLE PLAY', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Google Play Store'],
+  ['APPLE.COM/BILL', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Apple subscriptions/App Store'],
+  ['APPLE ITUNES', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Apple iTunes/App Store'],
+  ['AMAZON PRIME', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Amazon Prime membership'],
+  ['PRIMEVIDEO', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Amazon Prime Video'],
+  ['HOTSTAR INDIA', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Disney+ Hotstar'],
+  ['NOVI DIGITAL', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Hotstar (Novi Digital)'],
+  ['JIOCINEMA', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'JioCinema OTT'],
+  ['RELIANCE JIO', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Jio telecom/broadband'],
+  // Bills / Utilities
+  ['BHARTI AIRTEL', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Airtel (legal name: Bharti Airtel)'],
+  ['VODAFONE IDEA', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Vi (Vodafone Idea)'],
+  ['TATA COMMUNICATIONS', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Tata Communications internet'],
+  // Digital wallets / Payments (usually expense pass-through)
+  ['PHONEPE PRIVATE', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'PhonePe merchant payment'],
+  ['PAYTM PAYMENTS BANK', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Paytm merchant payment'],
+  ['RAZORPAY', 'contains', 'both', 'expense', 'Shopping', 'include', 50, 'Razorpay payment gateway'],
+  ['BILLDESK', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'BillDesk utility payment'],
+  // Health
+  ['APOLLO HEALTH', 'contains', 'both', 'expense', 'Health & Medical', 'include', 50, 'Apollo Hospitals/Pharmacy'],
+  ['MEDPLUS', 'contains', 'both', 'expense', 'Health & Medical', 'include', 50, 'MedPlus pharmacy chain'],
+  ['WELLNESS FOREVER', 'contains', 'both', 'expense', 'Health & Medical', 'include', 50, 'Wellness Forever pharmacy'],
+  ['TATA 1MG', 'contains', 'both', 'expense', 'Health & Medical', 'include', 50, 'Tata 1mg'],
+  // Education
+  ['THINK AND LEARN', 'contains', 'both', 'expense', 'Education', 'include', 50, "BYJU'S (Think and Learn)"],
+  ['SORTING HAT TECH', 'contains', 'both', 'expense', 'Education', 'include', 50, 'Unacademy (Sorting Hat)'],
+  // Personal care / Fitness
+  ['CURE.FIT', 'contains', 'both', 'expense', 'Personal Care', 'include', 50, 'Cult.fit fitness'],
+  ['CUREFIT', 'contains', 'both', 'expense', 'Personal Care', 'include', 50, 'Cult.fit fitness'],
+  ['NYKAA FASHION', 'contains', 'both', 'expense', 'Personal Care', 'include', 50, 'Nykaa Fashion'],
+  // Tech
+  ['MICROSOFT INDIA', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Microsoft 365 / Xbox'],
+  ['MICROSOFT *', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Microsoft subscription'],
+  ['GOOGLE *WORKSPACE', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Google Workspace'],
+  ['GOOGLE *GSUITE', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Google GSuite'],
+  ['ADOBE SYSTEMS', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'Adobe Creative Cloud'],
+  ['GITHUB', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'GitHub subscription'],
+  ['CHAT GPT', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'ChatGPT Plus / OpenAI'],
+  ['OPENAI', 'contains', 'both', 'expense', 'Bills & Utilities', 'include', 50, 'OpenAI subscription'],
 
   // ─── PRIORITY 50: ENTERTAINMENT ───
   ['NETFLIX', 'contains', 'both', 'expense', 'Entertainment', 'include', 50, 'Netflix subscription'],

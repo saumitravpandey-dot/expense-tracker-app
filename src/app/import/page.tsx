@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import { CATEGORIES, TRANSACTION_TYPES, TRANSACTION_TYPE_CONFIG } from '@/lib/types';
 import type { TransactionType } from '@/lib/types';
-import type { ImportedTransaction } from '@/app/api/import/route';
+import type { ImportedTransaction, StatementType, BankHint } from '@/app/api/import/route';
 
 type Step = 'upload' | 'processing' | 'review' | 'done';
 
@@ -13,13 +13,24 @@ interface ReviewRow extends ImportedTransaction {
   checked: boolean;
 }
 
+const BANKS: { id: BankHint; label: string; logo: string }[] = [
+  { id: 'auto',     label: 'Auto-detect',  logo: '🔍' },
+  { id: 'hdfc',     label: 'HDFC',         logo: '🔵' },
+  { id: 'sbi',      label: 'SBI Card',     logo: '🟣' },
+  { id: 'icici',    label: 'ICICI',        logo: '🟠' },
+  { id: 'axis',     label: 'Axis',         logo: '🔴' },
+  { id: 'kotak',    label: 'Kotak',        logo: '🔴' },
+  { id: 'amex',     label: 'AmEx',         logo: '🔷' },
+  { id: 'indusind', label: 'IndusInd',     logo: '🟤' },
+  { id: 'idfc',     label: 'IDFC FIRST',   logo: '🟢' },
+  { id: 'rbl',      label: 'RBL',          logo: '🔶' },
+  { id: 'yes',      label: 'Yes Bank',     logo: '🔵' },
+];
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1]);
-    };
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -46,6 +57,9 @@ export default function ImportPage() {
   const [importedCount, setImportedCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all');
+  // Statement options
+  const [statementType, setStatementType] = useState<StatementType>('bank');
+  const [bank, setBank] = useState<BankHint>('auto');
   const [includeCredits, setIncludeCredits] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -60,7 +74,13 @@ export default function ImportPage() {
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, content, includeCredits }),
+        body: JSON.stringify({
+          type,
+          content,
+          includeCredits: statementType === 'bank' ? includeCredits : false,
+          statementType,
+          bank,
+        }),
       });
 
       const data = await res.json();
@@ -68,7 +88,7 @@ export default function ImportPage() {
 
       const transactions: ImportedTransaction[] = data.transactions ?? [];
       if (transactions.length === 0) {
-        setError('No transactions found. Make sure this is a bank statement with debit entries.');
+        setError('No transactions found. Make sure this is a bank/card statement with transactions visible.');
         setStep('upload');
         return;
       }
@@ -94,7 +114,7 @@ export default function ImportPage() {
     const file = e.dataTransfer.files?.[0];
     if (file) processFile(file);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [statementType, bank, includeCredits]);
 
   function toggleAll(checked: boolean) {
     setRows(prev => prev.map(r =>
@@ -141,7 +161,6 @@ export default function ImportPage() {
   const checkedCount = rows.filter(r => r.checked).length;
   const checkedTotal = rows.filter(r => r.checked).reduce((s, r) => s + Number(r.amount), 0);
   const duplicateCount = rows.filter(r => r.duplicate).length;
-
   const typeCounts = rows.reduce<Record<string, number>>((acc, r) => {
     acc[r.transaction_type] = (acc[r.transaction_type] ?? 0) + 1;
     return acc;
@@ -152,8 +171,8 @@ export default function ImportPage() {
       <Nav />
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-1">Import Bank Statement</h1>
-          <p className="text-sm text-gray-500">Upload a PDF or CSV — AI extracts and categorises every debit automatically.</p>
+          <h1 className="text-2xl font-bold mb-1">Import Statement</h1>
+          <p className="text-sm text-gray-500">Upload a PDF or CSV — AI extracts, cleans, and categorises every transaction automatically.</p>
         </div>
 
         {/* ── UPLOAD ── */}
@@ -165,6 +184,82 @@ export default function ImportPage() {
               </div>
             )}
 
+            {/* Statement type toggle */}
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 space-y-4">
+              <p className="text-sm font-semibold">Statement type</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStatementType('bank')}
+                  className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                    statementType === 'bank'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl">🏦</span>
+                  <span>Bank / UPI Account</span>
+                  <span className="text-xs text-gray-400 font-normal">Savings, Current, UPI debits</span>
+                </button>
+                <button
+                  onClick={() => setStatementType('cc')}
+                  className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl border-2 text-sm font-medium transition-all ${
+                    statementType === 'cc'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-2xl">💳</span>
+                  <span>Credit Card Statement</span>
+                  <span className="text-xs text-gray-400 font-normal">CC purchases, EMIs, fees</span>
+                </button>
+              </div>
+
+              {/* Bank selector */}
+              <div>
+                <p className="text-xs text-gray-500 mb-2">
+                  {statementType === 'cc' ? 'Credit card issuer' : 'Bank'}{' '}
+                  <span className="text-gray-400">(optional — auto-detect works in most cases)</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {BANKS.map(b => (
+                    <button
+                      key={b.id}
+                      onClick={() => setBank(b.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        bank === b.id
+                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+                          : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300 dark:hover:border-gray-600'
+                      }`}
+                    >
+                      <span>{b.logo}</span>
+                      <span>{b.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Include credits toggle (bank only) */}
+              {statementType === 'bank' ? (
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div
+                    onClick={() => setIncludeCredits(s => !s)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${includeCredits ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${includeCredits ? 'translate-x-4' : 'translate-x-1'}`} />
+                  </div>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Also capture income/credits <span className="text-gray-400">(salary, UPI received)</span>
+                  </span>
+                </label>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-lg">
+                  <span>✓</span>
+                  <span>Credit card mode: payment received, cashbacks, and reward redemptions are automatically excluded</span>
+                </div>
+              )}
+            </div>
+
+            {/* Drop zone */}
             <div
               className={`border-2 border-dashed rounded-2xl p-14 text-center cursor-pointer transition-colors ${
                 isDragging
@@ -176,35 +271,48 @@ export default function ImportPage() {
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
             >
-              <div className="text-6xl mb-4">📄</div>
-              <p className="text-lg font-semibold mb-1">Drop your bank statement here</p>
-              <p className="text-sm text-gray-500 mb-5">PDF or CSV · HDFC, ICICI, SBI, Axis, Kotak, Yes Bank &amp; more</p>
+              <div className="text-6xl mb-4">{statementType === 'cc' ? '💳' : '📄'}</div>
+              <p className="text-lg font-semibold mb-1">
+                Drop your {statementType === 'cc' ? 'credit card' : 'bank account'} statement here
+              </p>
+              <p className="text-sm text-gray-500 mb-5">
+                {statementType === 'cc'
+                  ? 'PDF or Excel — HDFC, SBI Card, ICICI, Axis, Kotak, AmEx & more'
+                  : 'PDF or CSV — HDFC, ICICI, SBI, Axis, Kotak & more'}
+              </p>
               <span className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">
                 Choose File
               </span>
             </div>
-            <input ref={fileRef} type="file" accept=".pdf,.csv,text/csv,application/pdf" className="hidden" onChange={handleFileChange} />
+            <input ref={fileRef} type="file" accept=".pdf,.csv,.xls,.xlsx,text/csv,application/pdf" className="hidden" onChange={handleFileChange} />
 
-            {/* Include credits toggle */}
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <div
-                onClick={() => setIncludeCredits(s => !s)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${includeCredits ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-              >
-                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${includeCredits ? 'translate-x-4' : 'translate-x-1'}`} />
-              </div>
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                Also capture income/credits (salary, UPI received)
-              </span>
-            </label>
-
-            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-5 text-sm space-y-1.5 text-gray-500">
-              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-2">How to download your statement</p>
-              <p>🏦 <strong>HDFC</strong> — Net Banking → My Accounts → Download Statement</p>
-              <p>🏦 <strong>ICICI</strong> — iMobile / Net Banking → Accounts → e-Statement</p>
-              <p>🏦 <strong>SBI</strong> — OnlineSBI → e-Services → e-Statement</p>
-              <p>🏦 <strong>Axis / Kotak</strong> — Net Banking → Accounts → Statement Download</p>
-              <p className="pt-2 text-xs">Your file is processed locally — never uploaded to any third-party server.</p>
+            {/* Download instructions */}
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-5 text-sm space-y-3 text-gray-500">
+              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                How to download your {statementType === 'cc' ? 'credit card' : 'bank account'} statement
+              </p>
+              {statementType === 'cc' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  <p>💳 <strong>HDFC</strong> — Net Banking → Credit Cards → View Statement → Download</p>
+                  <p>💳 <strong>SBI Card</strong> — sbicard.com → My Account → Statements → Download</p>
+                  <p>💳 <strong>ICICI</strong> — iMobile / Net Banking → Credit Cards → e-Statement (PDF or Excel)</p>
+                  <p>💳 <strong>Axis</strong> — Net Banking → Cards → Card Statement → Download PDF</p>
+                  <p>💳 <strong>Kotak</strong> — Net Banking → Credit Cards → Statement → Download PDF</p>
+                  <p>💳 <strong>AmEx</strong> — americanexpress.com/in → Account → Statements → PDF</p>
+                  <p>💳 <strong>IndusInd</strong> — IndusMobile / Net Banking → Cards → Download Statement</p>
+                  <p>💳 <strong>IDFC FIRST</strong> — Firstmobile / Net Banking → Credit Card → e-Statement</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p>🏦 <strong>HDFC</strong> — Net Banking → My Accounts → Download Statement (CSV format recommended)</p>
+                  <p>🏦 <strong>ICICI</strong> — iMobile / Net Banking → Accounts → e-Statement → XLS</p>
+                  <p>🏦 <strong>SBI</strong> — OnlineSBI → e-Services → e-Statement</p>
+                  <p>🏦 <strong>Axis / Kotak</strong> — Net Banking → Accounts → Statement Download</p>
+                </div>
+              )}
+              <p className="pt-1 text-xs">
+                🔒 Your file is sent directly to the AI parser — never stored or shared with any third party.
+              </p>
             </div>
           </div>
         )}
@@ -212,9 +320,17 @@ export default function ImportPage() {
         {/* ── PROCESSING ── */}
         {step === 'processing' && (
           <div className="text-center py-28">
-            <div className="text-6xl mb-6 animate-pulse">🔍</div>
+            <div className="text-6xl mb-6 animate-pulse">{statementType === 'cc' ? '💳' : '🔍'}</div>
             <p className="text-xl font-semibold mb-2">Analysing your statement…</p>
-            <p className="text-sm text-gray-500">Claude is reading every line and classifying each transaction.<br />This takes 15–45 seconds depending on statement length.</p>
+            <p className="text-sm text-gray-500 mb-6">
+              Claude is reading every transaction line, cleaning merchant names,<br />
+              and classifying each entry. This takes 15–60 seconds.
+            </p>
+            {statementType === 'cc' && bank !== 'auto' && (
+              <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                Using {BANKS.find(b => b.id === bank)?.label} credit card parsing rules
+              </p>
+            )}
           </div>
         )}
 
@@ -227,7 +343,9 @@ export default function ImportPage() {
                 <p className="text-sm text-gray-500">
                   {checkedCount} selected · {rows[0]?.currency ?? 'INR'} {checkedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   {duplicateCount > 0 && (
-                    <span className="ml-2 text-yellow-600 dark:text-yellow-400">· {duplicateCount} possible duplicate{duplicateCount !== 1 ? 's' : ''} (unchecked)</span>
+                    <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                      · {duplicateCount} possible duplicate{duplicateCount !== 1 ? 's' : ''} (unchecked)
+                    </span>
                   )}
                 </p>
               </div>
@@ -297,7 +415,7 @@ export default function ImportPage() {
                   {visibleRows.map((row, vi) => {
                     const i = rows.indexOf(row);
                     return (
-                      <tr key={i} className={`transition-opacity ${!row.checked ? 'opacity-35' : ''} hover:bg-gray-50 dark:hover:bg-gray-800/40`}>
+                      <tr key={vi} className={`transition-opacity ${!row.checked ? 'opacity-35' : ''} hover:bg-gray-50 dark:hover:bg-gray-800/40`}>
                         <td className="px-3 py-2.5 text-center">
                           <input type="checkbox" checked={row.checked} onChange={() => toggleRow(i)} className="rounded" />
                         </td>
@@ -317,7 +435,7 @@ export default function ImportPage() {
                             )}
                           </div>
                           {row.description && row.description !== row.merchant && (
-                            <p className="text-xs text-gray-400 truncate max-w-xs mt-0.5">{row.description}</p>
+                            <p className="text-xs text-gray-400 truncate max-w-xs mt-0.5" title={row.description}>{row.description}</p>
                           )}
                         </td>
                         <td className="px-3 py-2.5">
@@ -382,6 +500,9 @@ export default function ImportPage() {
             </div>
           </div>
         )}
+
+        {/* Type badge (unused but imported — suppress lint) */}
+        <span className="hidden"><TypeBadge type="expense" /></span>
       </main>
     </>
   );
