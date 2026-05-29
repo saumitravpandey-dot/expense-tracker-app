@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import KeyboardNav from "@/components/KeyboardNav";
+import AppProviders from "@/components/AppProviders";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,17 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-        <KeyboardNav />
-        {children}
-        {/* Mobile floating add button */}
-        <Link
-          href="/add"
-          className="md:hidden fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg flex items-center justify-center text-2xl font-light transition-colors"
-          aria-label="Add transaction"
-        >
-          +
-        </Link>
+      <body className="min-h-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 pb-16 md:pb-0">
+        <AppProviders>
+          {children}
+        </AppProviders>
       </body>
     </html>
   );

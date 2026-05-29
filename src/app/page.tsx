@@ -84,6 +84,14 @@ function DashboardInner({ month }: { month: string }) {
   const allTimeTotal = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE transaction_type != 'income'`).get() as { total: number }).total;
   const count = (db.prepare(`SELECT COUNT(*) as c FROM expenses WHERE transaction_type != 'income'`).get() as { c: number }).c;
 
+  // Previous month for trend comparison
+  const [py, pm] = month.split('-').map(Number);
+  const prevDate = new Date(py, pm - 2, 1);
+  const prevYM = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+  const { start: prevStart, end: prevEnd } = monthRange(prevYM);
+  const prevExpenses = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ? AND transaction_type != 'income'`).get(prevStart, prevEnd) as { total: number }).total;
+  const prevIncome = (db.prepare(`SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ? AND transaction_type = 'income'`).get(prevStart, prevEnd) as { total: number }).total;
+
   // Top merchants for selected month
   const topMerchants = db.prepare(`
     SELECT merchant, SUM(amount) as total, COUNT(*) as cnt
@@ -120,12 +128,18 @@ function DashboardInner({ month }: { month: string }) {
 
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Spent" value={`${currency} ${monthExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} sub="expenses this month" />
+          <StatCard
+            label="Spent"
+            value={`${currency} ${monthExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+            sub="expenses this month"
+            trend={prevExpenses > 0 ? { pct: Math.round(((monthExpenses - prevExpenses) / prevExpenses) * 100), positiveIsGood: false } : null}
+          />
           <StatCard
             label="Income"
             value={monthIncome > 0 ? `${currency} ${monthIncome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
             sub={monthIncome > 0 ? 'credited' : 'Add income →'}
             href={monthIncome === 0 ? '/add' : undefined}
+            trend={prevIncome > 0 && monthIncome > 0 ? { pct: Math.round(((monthIncome - prevIncome) / prevIncome) * 100), positiveIsGood: true } : null}
           />
           <StatCard
             label="Net Savings"
@@ -291,17 +305,33 @@ function DashboardInner({ month }: { month: string }) {
 }
 
 function StatCard({
-  label, value, sub, alert, href,
+  label, value, sub, alert, href, trend,
 }: {
-  label: string; value: string; sub: string; alert?: boolean; href?: string;
+  label: string;
+  value: string;
+  sub: string;
+  alert?: boolean;
+  href?: string;
+  trend?: { pct: number; positiveIsGood: boolean } | null;
 }) {
+  const trendUp = trend && trend.pct > 0;
+  const trendGood = trend && (trend.positiveIsGood ? trendUp : !trendUp);
+  const trendColor = trendGood ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400';
+
   const inner = (
     <div className={`bg-white dark:bg-gray-900 border rounded-2xl p-5 transition-colors ${
       alert ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-800'
     } ${href ? 'hover:border-emerald-400 dark:hover:border-emerald-600 cursor-pointer' : ''}`}>
       <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
       <p className={`text-2xl font-bold truncate ${alert ? 'text-red-600 dark:text-red-400' : ''}`}>{value}</p>
-      <p className="text-xs text-gray-400 mt-1">{sub}</p>
+      <div className="flex items-center gap-2 mt-1">
+        <p className="text-xs text-gray-400">{sub}</p>
+        {trend && trend.pct !== 0 && (
+          <span className={`text-xs font-medium ${trendColor}`}>
+            {trendUp ? '↑' : '↓'} {Math.abs(trend.pct)}%
+          </span>
+        )}
+      </div>
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;

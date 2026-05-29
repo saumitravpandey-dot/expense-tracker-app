@@ -6,6 +6,7 @@ import Nav from '@/components/Nav';
 import CategoryBadge from '@/components/CategoryBadge';
 import { CATEGORIES, TRANSACTION_TYPES, TRANSACTION_TYPE_CONFIG } from '@/lib/types';
 import type { Expense } from '@/lib/types';
+import { useToast } from '@/components/Toast';
 
 interface EditState {
   id: number;
@@ -62,7 +63,6 @@ function ExpensesPageInner() {
   const [from, setFrom] = useState(sp.get('from') ?? '');
   const [to, setTo] = useState(sp.get('to') ?? '');
   const [search, setSearch] = useState('');
-  const [deleting, setDeleting] = useState<number | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -72,6 +72,9 @@ function ExpensesPageInner() {
   const [sortCol, setSortCol] = useState<'date' | 'amount' | 'merchant' | 'category'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoMap = useRef<Map<number, Expense>>(new Map());
+  const undoTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
   const PAGE_SIZE = 50;
 
   // Debounce search input
@@ -152,23 +155,84 @@ function ExpensesPageInner() {
     setSaving(false);
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm('Delete this expense?')) return;
-    setDeleting(id);
-    await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+  function handleDelete(id: number) {
+    const expense = expenses.find(e => e.id === id);
+    if (!expense) return;
+
+    // Optimistically remove
     setExpenses(prev => prev.filter(e => e.id !== id));
     setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
-    setDeleting(null);
+    undoMap.current.set(id, expense);
+
+    // Cancel any existing timer for this id
+    const existing = undoTimers.current.get(id);
+    if (existing) clearTimeout(existing);
+
+    toastSuccess(
+      `Deleted "${expense.merchant || 'expense'}"`,
+      {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            const saved = undoMap.current.get(id);
+            if (!saved) return;
+            setExpenses(prev =>
+              [...prev, saved].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+            );
+            undoMap.current.delete(id);
+            const t = undoTimers.current.get(id);
+            if (t) { clearTimeout(t); undoTimers.current.delete(id); }
+          },
+        },
+        duration: 5500,
+      }
+    );
+
+    // Actual DELETE after undo window
+    const timer = setTimeout(async () => {
+      if (!undoMap.current.has(id)) return; // already undone
+      try {
+        await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+      } catch {
+        toastError('Delete failed — expense may still exist');
+      }
+      undoMap.current.delete(id);
+      undoTimers.current.delete(id);
+    }, 5000);
+    undoTimers.current.set(id, timer);
   }
 
   async function handleBulkDelete() {
     if (selected.size === 0) return;
-    if (!confirm(`Delete ${selected.size} selected expense${selected.size !== 1 ? 's' : ''}?`)) return;
-    setBulkDeleting(true);
-    await Promise.all([...selected].map(id => fetch(`/api/expenses/${id}`, { method: 'DELETE' })));
+    const ids = [...selected];
+    const count = ids.length;
+    const removed = expenses.filter(e => ids.includes(e.id));
+
+    // Optimistic remove
     setExpenses(prev => prev.filter(e => !selected.has(e.id)));
     setSelected(new Set());
     setBulkDeleting(false);
+
+    toastSuccess(
+      `Deleted ${count} transaction${count !== 1 ? 's' : ''}`,
+      {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            setExpenses(prev =>
+              [...prev, ...removed].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+            );
+            toastInfo(`${count} transaction${count !== 1 ? 's' : ''} restored`);
+          },
+        },
+        duration: 5500,
+      }
+    );
+
+    // Actual delete after delay
+    setTimeout(async () => {
+      await Promise.all(ids.map(id => fetch(`/api/expenses/${id}`, { method: 'DELETE' })));
+    }, 5000);
   }
 
   async function handleBulkCategorize() {
@@ -486,9 +550,9 @@ function ExpensesPageInner() {
                       </td>
                       <td className="px-4 py-3 text-right space-x-3">
                         <button onClick={() => startEdit(e)} className="text-xs text-blue-500 hover:text-blue-700">Edit</button>
-                        <button onClick={() => handleDelete(e.id)} disabled={deleting === e.id}
-                          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-40">
-                          {deleting === e.id ? '…' : 'Delete'}
+                        <button onClick={() => handleDelete(e.id)}
+                          className="text-xs text-red-500 hover:text-red-700">
+                          Delete
                         </button>
                       </td>
                     </tr>
