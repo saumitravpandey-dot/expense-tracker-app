@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-const DB_PATH = path.join(process.cwd(), 'expenses.db');
+// On Vercel the project root is read-only; use /tmp which is writable (512 MB, ephemeral per instance)
+const DB_PATH = process.env.VERCEL
+  ? '/tmp/expenses.db'
+  : path.join(process.cwd(), 'expenses.db');
 
 let _db: Database.Database | null = null;
 
